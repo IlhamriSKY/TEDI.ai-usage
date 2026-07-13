@@ -10,7 +10,7 @@ import { ctx } from "./runtime.js";
 const USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
 
 export async function readClaudeUsage(home, platform) {
-  const token = await readToken(home);
+  const token = await readToken(home, platform);
   if (!token.accessToken) return { ok: false, reason: token.reason || "not-signed-in" };
 
   const json = await curlUsage(token.accessToken, platform);
@@ -30,15 +30,51 @@ export async function readClaudeUsage(home, platform) {
   };
 }
 
-async function readToken(home) {
-  const path = `${home}/.claude/.credentials.json`;
+async function readToken(home, platform) {
+  // Linux / Windows: Claude Code writes a plaintext ~/.claude/.credentials.json.
+  const fromFile = await tokenFromFile(home);
+  if (fromFile.accessToken) return fromFile;
+  // macOS: the same JSON lives in the login Keychain instead (the file is
+  // usually absent), so fall back to `security find-generic-password`. Uses the
+  // already-granted shell permission; may prompt for Keychain access once.
+  if (platform === "macos") {
+    const fromKeychain = await tokenFromKeychain();
+    if (fromKeychain.accessToken) return fromKeychain;
+  }
+  return { reason: "not-signed-in" };
+}
+
+async function tokenFromFile(home) {
   try {
-    const res = await ctx.invoke("fs_read_file", { path });
-    if (res?.kind !== "text" || !res.content) return { reason: "not-signed-in" };
-    const oauth = JSON.parse(res.content)?.claudeAiOauth || {};
+    const res = await ctx.invoke("fs_read_file", { path: `${home}/.claude/.credentials.json` });
+    if (res?.kind === "text" && res.content) return parseCreds(res.content);
+  } catch {
+    // absent / unreadable -> caller tries the next source
+  }
+  return {};
+}
+
+async function tokenFromKeychain() {
+  try {
+    const out = await ctx.invoke("shell_run_command", {
+      command: "security find-generic-password -s 'Claude Code-credentials' -w",
+      cwd: null,
+      timeoutSecs: 10,
+    });
+    const body = String(out?.stdout ?? "").trim();
+    if (body) return parseCreds(body);
+  } catch (err) {
+    ctx?.logger?.info?.("claude keychain read failed", err);
+  }
+  return {};
+}
+
+function parseCreds(text) {
+  try {
+    const oauth = JSON.parse(text)?.claudeAiOauth || {};
     return { accessToken: oauth.accessToken || null, plan: oauth.subscriptionType || null };
   } catch {
-    return { reason: "not-signed-in" };
+    return {};
   }
 }
 

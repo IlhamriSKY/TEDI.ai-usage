@@ -8,12 +8,16 @@ import { ctx } from "./runtime.js";
 const CLAUDE_ID = "claude";
 const CODEX_ID = "codex";
 
+// Icons are a BARE relative asset path (the host reads `<ext-root>/<path>` via
+// ext_read_asset_bytes). Do NOT prefix `ext-asset:` - that prefix is not
+// stripped anywhere in the icon-resolution path, so it resolves to a missing
+// file and renders a blank box.
 export function renderClaude(u) {
-  setMeter(CLAUDE_ID, "ext-asset:claude.svg", u, u ? u.fiveHour : null, u ? u.weekly : null, claudeTooltip(u));
+  setMeter(CLAUDE_ID, "claude.svg", u, u ? u.fiveHour : null, u ? u.weekly : null, claudeTooltip(u));
 }
 
 export function renderCodex(u) {
-  setMeter(CODEX_ID, "ext-asset:openai.svg", u, u ? u.primary : null, u ? u.secondary : null, codexTooltip(u));
+  setMeter(CODEX_ID, "openai.svg", u, u ? u.primary : null, u ? u.secondary : null, codexTooltip(u));
 }
 
 export function removeAll() {
@@ -88,7 +92,9 @@ function winLabel(mins) {
 function windowLine(label, w) {
   if (!w || w.pct == null) return `${label}: no data`;
   const reset = resetText(w);
-  return `${label}: ${Math.round(w.pct)}%${reset ? `  ·  resets ${reset}` : ""}`;
+  // Single spaces around the middot: the host tooltip uses `white-space:
+  // pre-line`, which collapses runs of spaces anyway.
+  return `${label}: ${Math.round(w.pct)}%${reset ? ` · resets ${reset}` : ""}`;
 }
 
 function resetText(w) {

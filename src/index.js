@@ -27,7 +27,9 @@ export async function activate(context) {
   renderCodex(null);
 
   await refresh();
-  state.timer = setInterval(refresh, POLL_MS);
+  // Guard against a deactivate() that raced the first `await refresh()`: if the
+  // extension was torn down mid-refresh, don't start (and orphan) a timer.
+  if (state.active) state.timer = setInterval(refresh, POLL_MS);
 }
 
 async function refresh() {

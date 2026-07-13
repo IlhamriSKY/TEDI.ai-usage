@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.1
+
+Fixes from a pre-release review.
+
+- **Status-bar icons render again.** They used an `ext-asset:` icon prefix that
+  the host does not strip, so both provider glyphs resolved to a missing file
+  and showed a blank box. Now bare relative paths (`claude.svg` / `openai.svg`).
+- **Claude usage now works on macOS.** Claude Code stores its OAuth credentials
+  in the login Keychain there, not in `~/.claude/.credentials.json`, so the
+  Claude meter was permanently "Not signed in". Added a Keychain fallback
+  (`security find-generic-password -s "Claude Code-credentials"`).
+- Tooltip spacing tidied (the host collapses double spaces) and the poll timer
+  can no longer be orphaned by a deactivate that races the first refresh.
+
 ## 0.1.0
 
 Initial release.
