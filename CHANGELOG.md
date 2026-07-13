@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.6
+
+Resilience for Anthropic's rate-limited usage endpoint (a known Claude Code
+issue: the `/api/oauth/usage` endpoint 429s aggressively even at 30-60s and
+often omits `Retry-After`).
+
+- Poll every **5 minutes** instead of 60 seconds (matches the community tools).
+- Detect the 429 by HTTP status and **back off** (respect `Retry-After` when
+  present, else 15 minutes) so we stop hammering and prolonging the throttle.
+- **Keep showing the last known percentages** (marked "last known") during a
+  rate-limit instead of blanking; restore them from storage across restarts.
+
 ## 0.1.5
 
 - **Signed-in account shown in Settings.** Each provider now has a read-only

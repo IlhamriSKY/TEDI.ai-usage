@@ -16,7 +16,10 @@ import { readCodexUsage } from "./codex.js";
 import { readClaudeAccount, readCodexAccount } from "./accounts.js";
 import { renderClaude, renderCodex, removeAll } from "./statusbar.js";
 
-const POLL_MS = 60_000;
+// The Claude usage endpoint 429s aggressively at 30-60s (a known Claude Code
+// issue: anthropics/claude-code#31637), so poll gently and back off hard on 429.
+const POLL_MS = 5 * 60_000;
+const RATE_LIMIT_COOLDOWN_MS = 15 * 60_000;
 
 export async function activate(context) {
   setCtx(context);
@@ -44,6 +47,25 @@ export async function activate(context) {
   // Seed both meters immediately so the icons appear while the first poll runs.
   renderClaude(null);
   renderCodex(null);
+
+  // Restore the last known values from storage, so a restart during a rate-limit
+  // window still shows the last percentages (marked stale) instead of blanking.
+  try {
+    const [pc, px] = await Promise.all([
+      ctx.storage.get("lastClaude"),
+      ctx.storage.get("lastCodex"),
+    ]);
+    if (pc?.ok) {
+      state.lastClaude = { ...pc, stale: true };
+      renderClaude(state.lastClaude);
+    }
+    if (px?.ok) {
+      state.lastCodex = { ...px, stale: true };
+      renderCodex(state.lastCodex);
+    }
+  } catch {
+    /* no cache yet */
+  }
 
   // Enrich the Settings card with the signed-in account per provider (read once;
   // accounts rarely change within a session).
@@ -74,16 +96,43 @@ async function refresh() {
   if (!home || !state.active) return;
 
   const platform = ctx?.os?.platform ?? "unknown";
-  const [claude, codex] = await Promise.allSettled([
-    readClaudeUsage(home, platform),
-    readCodexUsage(home),
-  ]);
+  // Skip the Claude network call while backing off from a 429; Codex is a local
+  // read and always runs.
+  const claudeP =
+    Date.now() < state.claudeCooldownUntil
+      ? Promise.resolve(null)
+      : readClaudeUsage(home, platform);
+  const [claude, codex] = await Promise.allSettled([claudeP, readCodexUsage(home)]);
   if (!state.active) return;
 
-  state.lastClaude = claude.status === "fulfilled" ? claude.value : null;
-  state.lastCodex = codex.status === "fulfilled" ? codex.value : null;
+  const claudeVal = claude.status === "fulfilled" ? claude.value : null;
+  const codexVal = codex.status === "fulfilled" ? codex.value : null;
+
+  if (claudeVal?.reason === "rate-limited") {
+    // Respect Retry-After when present and non-zero; else back off 15 minutes
+    // (the endpoint usually omits it and stays 429 for a long while).
+    const ra = claudeVal.retryAfterSec;
+    state.claudeCooldownUntil =
+      Date.now() + (ra && ra > 0 ? Math.max(ra * 1000, 60_000) : RATE_LIMIT_COOLDOWN_MS);
+  } else if (claudeVal?.ok) {
+    state.claudeCooldownUntil = 0;
+    void ctx.storage.set("lastClaude", claudeVal).catch(() => {});
+  }
+  if (codexVal?.ok) void ctx.storage.set("lastCodex", codexVal).catch(() => {});
+
+  // Keep the last good value across a transient failure (marked stale).
+  state.lastClaude = mergeUsage(state.lastClaude, claudeVal);
+  state.lastCodex = mergeUsage(state.lastCodex, codexVal);
   renderClaude(state.lastClaude);
   renderCodex(state.lastCodex);
+}
+
+// Keep the last GOOD value across a transient failure, marking it stale so the
+// meter shows the last known percentages instead of blanking.
+function mergeUsage(prev, next) {
+  if (next?.ok) return next;
+  if (prev?.ok) return { ...prev, stale: true };
+  return next ?? prev ?? null;
 }
 
 // The value shown in a provider's read-only "note" row: "<email> (<plan>)".

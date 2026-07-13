@@ -19,9 +19,13 @@ export const state = {
   showClaude: true,
   showCodex: true,
   /** Last usage result per provider, so a settings toggle can re-render the
-   *  meter immediately without waiting for the next poll. */
+   *  meter immediately without waiting for the next poll. Kept as the last GOOD
+   *  value across a transient failure (marked `stale`). */
   lastClaude: null,
   lastCodex: null,
+  /** Epoch ms until which Claude polling is paused after a rate-limit (429),
+   *  so we don't prolong the throttle. */
+  claudeCooldownUntil: 0,
 };
 
 export function clearTimer() {

@@ -74,7 +74,17 @@ function claudeView(u) {
     ["5-hour", u.fiveHour],
     ["Weekly", u.weekly],
   ];
-  return { tooltip: textTooltip(title, windows), detail: detailTooltip(title, windows) };
+  return markStale({ tooltip: textTooltip(title, windows), detail: detailTooltip(title, windows) }, u);
+}
+
+// When a value is the last-known one kept across a transient failure (e.g. a
+// rate-limit), note it so the meter reads as "not live" without blanking.
+function markStale(view, u) {
+  if (u?.stale) {
+    view.tooltip += "\nlast known (endpoint busy)";
+    if (view.detail) view.detail.rows.push({ label: "", note: "last known (endpoint busy)" });
+  }
+  return view;
 }
 
 function codexView(u) {
@@ -96,7 +106,7 @@ function codexView(u) {
   const text = textTooltip(title, windows) + (asOf ? `\n${asOf}` : "");
   const detail = detailTooltip(title, windows);
   if (asOf) detail.rows.push({ label: "", note: asOf });
-  return { tooltip: text, detail };
+  return markStale({ tooltip: text, detail }, u);
 }
 
 function textTooltip(title, windows) {

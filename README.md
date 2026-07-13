@@ -35,8 +35,11 @@ and the only network call is to Claude's own usage endpoint.
 | **Claude Code** | Reads the OAuth token from `~/.claude/.credentials.json` (or the macOS login Keychain), then GETs `https://api.anthropic.com/api/oauth/usage`, the same numbers `/usage` shows (`five_hour` + `seven_day` utilization and reset times). The request goes through `curl` because the app webview blocks a direct cross-origin `fetch`. |
 | **Codex** | Reads the newest `~/.codex/sessions/**/rollout-*.jsonl` and pulls the last `token_count` event's `rate_limits` (the `primary` / `secondary` windows). Codex only writes these once it makes an API call, so the meter shows the last known snapshot with an "as of ..." note. Window sizes are labelled by their reported duration (5-hour / weekly / monthly). |
 
-The meter refreshes every 60 seconds. A provider you are not signed into (or
-have not used) shows just a dimmed icon; hover it to see why.
+The meter refreshes every 5 minutes. Anthropic's usage endpoint rate-limits
+aggressive polling (a known Claude Code issue), so on a 429 the extension backs
+off and keeps showing the last known percentages (marked "last known") instead
+of blanking. A provider you are not signed into (or have not used) shows just a
+dimmed icon; hover it to see why.
 
 Bottom-right meters, and the hover tooltip (each window drawn as its own bar):
 
