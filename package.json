@@ -1,6 +1,6 @@
 {
   "name": "tedi-ai-usage",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "type": "module",
   "description": "Build tooling for the TEDI AI Usage Meter extension. The shipped artifact is the bundled extension.js (built in CI into the release .zip, not committed); source lives in src/.",

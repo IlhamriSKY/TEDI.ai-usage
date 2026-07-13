@@ -1,9 +1,12 @@
 // Presentation: turn a provider usage result into a status-bar item (icon +
-// percent label + severity-coloured progress bar) and a multiline detail
-// tooltip that draws a unicode bar for each window. The headline bar tracks the
-// fast 5-hour window; the tone tracks the worse of the two windows so a
-// near-cap weekly still turns the pill red. Each meter honours its
-// show/hide setting.
+// percent label + severity-coloured pill bar) and a detail tooltip that draws a
+// real progress bar per window. The headline pill tracks the fast 5-hour
+// window; the tone tracks the worse of the two windows so a near-cap weekly
+// still turns the pill red. Each meter honours its show/hide setting.
+//
+// The tooltip is provided two ways: `detail` (structured, rendered as real
+// bars) and `tooltip` (a plain-text summary kept as the accessible label and a
+// fallback on hosts that don't render `detail`).
 
 import { ctx, state } from "./runtime.js";
 
@@ -15,7 +18,7 @@ export function renderClaude(u) {
     ctx.statusBar.removeItem(CLAUDE_ID);
     return;
   }
-  setMeter(CLAUDE_ID, "claude.svg", u, u ? u.fiveHour : null, u ? u.weekly : null, claudeTooltip(u));
+  setMeter(CLAUDE_ID, "claude.svg", u, u ? u.fiveHour : null, u ? u.weekly : null, claudeView(u));
 }
 
 export function renderCodex(u) {
@@ -23,7 +26,7 @@ export function renderCodex(u) {
     ctx.statusBar.removeItem(CODEX_ID);
     return;
   }
-  setMeter(CODEX_ID, "openai.svg", u, u ? u.primary : null, u ? u.secondary : null, codexTooltip(u));
+  setMeter(CODEX_ID, "openai.svg", u, u ? u.primary : null, u ? u.secondary : null, codexView(u));
 }
 
 export function removeAll() {
@@ -31,10 +34,10 @@ export function removeAll() {
   ctx.statusBar.removeItem(CODEX_ID);
 }
 
-function setMeter(id, icon, u, head5h, headWeek, tooltip) {
+function setMeter(id, icon, u, head5h, headWeek, view) {
   if (!u || !u.ok) {
     // Unavailable: just the dimmed brand icon, the tooltip explains why.
-    ctx.statusBar.setItem({ id, icon, tone: "default", tooltip });
+    ctx.statusBar.setItem({ id, icon, tone: "default", tooltip: view.tooltip });
     return;
   }
   const head = head5h || headWeek; // headline = 5-hour window, else weekly
@@ -45,12 +48,13 @@ function setMeter(id, icon, u, head5h, headWeek, tooltip) {
     tone: toneFor(worst),
     label: head ? `${Math.round(head.pct)}%` : undefined,
     progress: head ? clamp01(head.pct / 100) : undefined,
-    tooltip,
+    tooltip: view.tooltip,
+    detail: view.detail,
   });
 }
 
 // Usage severity -> tone. Low = calm (green), climbing = amber, near the cap =
-// red. Drives both the bar fill colour and the icon tint in the host.
+// red. Drives the bar fill colour and the icon tint in the host.
 function toneFor(p) {
   if (p == null) return "default";
   if (p >= 90) return "error";
@@ -60,41 +64,70 @@ function toneFor(p) {
 
 const clamp01 = (n) => Math.max(0, Math.min(1, n));
 
-// A 10-cell unicode bar, e.g. 42% renders as "████░░░░░░". Block glyphs keep a
-// uniform width even in the tooltip's proportional font.
-function bar(pct, width = 10) {
-  const filled = Math.max(0, Math.min(width, Math.round((pct / 100) * width)));
-  return "█".repeat(filled) + "░".repeat(width - filled);
-}
+// ---- views: { tooltip: string, detail?: { title, rows } } -----------------
 
-// ---- tooltips (multiline; "\n" renders as line breaks in the host) --------
-
-function claudeTooltip(u) {
+function claudeView(u) {
   const title = "Claude Code" + (u?.plan ? ` (${cap(u.plan)})` : "");
-  if (!u) return `${title}\nLoading...`;
-  if (!u.ok) return `${title}\n${reasonText(u.reason, "claude")}`;
-  return [title, windowLine("5-hour", u.fiveHour), windowLine("Weekly", u.weekly)].join("\n");
+  if (!u) return { tooltip: `${title}\nLoading...` };
+  if (!u.ok) return { tooltip: `${title}\n${reasonText(u.reason, "claude")}` };
+  const windows = [
+    ["5-hour", u.fiveHour],
+    ["Weekly", u.weekly],
+  ];
+  return { tooltip: textTooltip(title, windows), detail: detailTooltip(title, windows) };
 }
 
-function codexTooltip(u) {
+function codexView(u) {
   const title = "Codex" + (u?.plan ? ` (ChatGPT ${cap(u.plan)})` : " (ChatGPT)");
-  if (!u) return `${title}\nLoading...`;
-  if (!u.ok) return `${title}\n${reasonText(u.reason, "codex")}`;
+  if (!u) return { tooltip: `${title}\nLoading...` };
+  if (!u.ok) return { tooltip: `${title}\n${reasonText(u.reason, "codex")}` };
   // Codex window sizes vary by plan (5-hour / weekly / 30-day / ...), so label
   // each by its own `window_minutes` rather than assuming 5h + weekly.
-  const rows = [title];
+  const windows = [];
   for (const w of [u.primary, u.secondary]) {
-    if (w && w.pct != null) rows.push(windowLine(winLabel(w.windowMinutes), w));
+    if (w && w.pct != null) windows.push([winLabel(w.windowMinutes), w]);
   }
-  if (rows.length === 1) rows.push("No usage recorded yet");
-  if (u.capturedAt) rows.push(`as of ${ago(u.capturedAt)}`);
-  return rows.join("\n");
+  const asOf = u.capturedAt ? `as of ${ago(u.capturedAt)}` : null;
+
+  if (!windows.length) {
+    const text = `${title}\nNo usage recorded yet${asOf ? `\n${asOf}` : ""}`;
+    return { tooltip: text, detail: { title, rows: [{ label: "", note: "No usage recorded yet" }] } };
+  }
+  const text = textTooltip(title, windows) + (asOf ? `\n${asOf}` : "");
+  const detail = detailTooltip(title, windows);
+  if (asOf) detail.rows.push({ label: "", note: asOf });
+  return { tooltip: text, detail };
 }
 
-function windowLine(label, w) {
-  if (!w || w.pct == null) return `${label}: no data`;
-  const reset = resetText(w);
-  return `${label} ${bar(w.pct)} ${Math.round(w.pct)}%${reset ? ` resets ${reset}` : ""}`;
+function textTooltip(title, windows) {
+  const lines = [title];
+  for (const [label, w] of windows) {
+    if (!w || w.pct == null) {
+      lines.push(`${label}: no data`);
+    } else {
+      const reset = resetNote(w);
+      lines.push(`${label} ${Math.round(w.pct)}%${reset ? ` ${reset}` : ""}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+function detailTooltip(title, windows) {
+  const rows = [];
+  for (const [label, w] of windows) {
+    if (!w || w.pct == null) {
+      rows.push({ label, note: "no data" });
+    } else {
+      rows.push({
+        label,
+        progress: clamp01(w.pct / 100),
+        tone: toneFor(w.pct),
+        value: `${Math.round(w.pct)}%`,
+        note: resetNote(w),
+      });
+    }
+  }
+  return { title, rows };
 }
 
 // window_minutes -> a human label. 300 -> "5-hour", 10080 -> "Weekly",
@@ -109,13 +142,13 @@ function winLabel(mins) {
   return `${mins}-min`;
 }
 
-function resetText(w) {
-  if (w.resetsInSeconds != null) return "in " + fmtDur(w.resetsInSeconds * 1000);
+function resetNote(w) {
+  if (w.resetsInSeconds != null) return "resets in " + fmtDur(w.resetsInSeconds * 1000);
   if (w.resetsAt) {
     const t = Date.parse(w.resetsAt);
     if (isFinite(t)) {
       const d = t - Date.now();
-      return d > 0 ? "in " + fmtDur(d) : "soon";
+      return d > 0 ? "resets in " + fmtDur(d) : "resets soon";
     }
   }
   return "";

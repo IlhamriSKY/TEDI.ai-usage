@@ -1,10 +1,10 @@
 {
   "id": "tedi.ai-usage",
   "name": "AI Usage Meter",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Shows Claude Code and Codex (ChatGPT) usage in the status bar as a progress bar with a detail tooltip: the 5-hour rolling window and the weekly limit for each, plus a reset countdown. Each meter can be hidden from Settings. Reads your local CLI credentials/sessions; the only network call is to Claude's own usage endpoint.",
   "author": "IlhamRiski - ilhamriski.com",
-  "homepage": "https://github.com/IlhamriSKY/TEDI.ai-usage",
+  "homepage": "https://tedi.ilhamriski.com/",
   "icon": "logo.png",
   "main": "extension.js",
   "permissions": [

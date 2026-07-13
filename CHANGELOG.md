@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.3
+
+- **Real progress bars in the tooltip.** Each window now renders as a graphical
+  themed bar (not ASCII blocks), with its percent and reset countdown. Backed by
+  a new optional `detail` field on the host status-bar item.
+- Project links now point to the TEDI website, <https://tedi.ilhamriski.com/>.
+- README tidied to match the layout of the other TEDI extensions.
+
 ## 0.1.2
 
 - **Claude logo.** The Claude meter now uses the Claude mark instead of the

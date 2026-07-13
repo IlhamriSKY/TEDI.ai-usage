@@ -2,33 +2,28 @@
 
 Shows your [Claude Code](https://claude.com/claude-code) and
 [Codex](https://openai.com/codex) (ChatGPT) usage right in the
-[TEDI](https://github.com/IlhamriSKY/TEDI) status bar: a small provider glyph, a
+[TEDI](https://tedi.ilhamriski.com/) status bar: a small provider glyph, a
 percentage, and a progress bar that turns amber then red as you approach a
 limit. Hover either meter for the full breakdown, the 5-hour rolling window and
-the weekly (or monthly) window, each drawn as a bar with a reset countdown.
+the weekly (or monthly) window, each drawn as a real progress bar with a reset
+countdown.
 
 <p align="center">
-  <img src="logo.png" alt="AI Usage Meter" width="96" />
+  <img src="logo.png" alt="AI Usage Meter" width="128" />
 </p>
 
-Two meters appear at the bottom-right, next to your other status-bar extensions:
+## Install
 
-```
-  claude 8% ██░░░░░░░░   openai 6% █░░░░░░░░░
-```
+1. Open **Settings → Extensions** in TEDI.
+2. Switch to the **From GitHub** tab.
+3. Paste `IlhamriSKY/TEDI.ai-usage` and click **Review → Install**.
 
-Hover for the detail (each window as its own bar):
+Enable the card's **Switch** and the two meters appear at the bottom-right.
 
-```
-Claude Code (Max)
-5-hour ██░░░░░░░░ 8% resets in 3h 9m
-Weekly ████░░░░░░ 41% resets in 3h 39m
-```
+## Update
 
-Each meter can be hidden individually from **Settings, Extensions, AI Usage
-Meter** (two switches: show the Claude meter, show the Codex meter).
-
----
+In **Settings → Extensions**, click **Check updates** on this extension's card.
+If a new release exists, click **Update** to reinstall in place.
 
 ## How it works
 
@@ -37,31 +32,43 @@ and the only network call is to Claude's own usage endpoint.
 
 | Provider | Source |
 | --- | --- |
-| **Claude Code** | Reads the OAuth token from `~/.claude/.credentials.json`, then GETs `https://api.anthropic.com/api/oauth/usage` (the same numbers `/usage` shows: `five_hour` + `seven_day` utilization and reset times). The request is routed through `curl` because the app webview blocks a direct cross-origin `fetch`. |
-| **Codex** | Reads the newest `~/.codex/sessions/**/rollout-*.jsonl` and pulls the last `token_count` event's `rate_limits` (the `primary` / `secondary` windows). Codex only writes these once it makes an API call, so the meter shows the last known snapshot with an "as of …" note. Window sizes are labelled by their reported duration (5-hour / weekly / monthly / …). |
+| **Claude Code** | Reads the OAuth token from `~/.claude/.credentials.json` (or the macOS login Keychain), then GETs `https://api.anthropic.com/api/oauth/usage`, the same numbers `/usage` shows (`five_hour` + `seven_day` utilization and reset times). The request goes through `curl` because the app webview blocks a direct cross-origin `fetch`. |
+| **Codex** | Reads the newest `~/.codex/sessions/**/rollout-*.jsonl` and pulls the last `token_count` event's `rate_limits` (the `primary` / `secondary` windows). Codex only writes these once it makes an API call, so the meter shows the last known snapshot with an "as of ..." note. Window sizes are labelled by their reported duration (5-hour / weekly / monthly). |
 
-The meter refreshes every 60 seconds. A provider you're not signed into (or
-haven't used) shows just a dimmed icon; hover it to see why.
+The meter refreshes every 60 seconds. A provider you are not signed into (or
+have not used) shows just a dimmed icon; hover it to see why.
 
-## Install
+Bottom-right meters, and the hover tooltip (each window drawn as its own bar):
 
-Grab the `.zip` from [Releases](https://github.com/IlhamriSKY/TEDI.ai-usage/releases/latest),
-then in TEDI: **Settings → Extensions → From file**, review the permissions, and
-click **Install**. Enable it and the meters appear.
+```
+claude 8% ██░░░░░░░░    openai 6% █░░░░░░░░░
+
+Claude Code (Max)
+5-hour   ██░░░░░░░░   8%   resets in 3h 9m
+Weekly   ████░░░░░░  41%   resets in 3h 39m
+```
+
+## Settings
+
+Two switches on this extension's Settings card toggle each meter independently:
+
+- **Show Claude Code meter**
+- **Show Codex (ChatGPT) meter**
 
 ## Permissions
 
 | Permission | Why |
 | --- | --- |
 | `statusbar:write` | Draw the two meters. |
+| `settings:read` | Read the two show/hide switches. |
 | `invoke:fs_read_file` | Read `~/.claude/.credentials.json` and the Codex rollout files. |
 | `invoke:fs_glob` | Find the newest Codex session file. |
 | `invoke:shell_run_command` | Resolve your home directory and run `curl` for Claude's usage endpoint. |
 | `ui:toast` | Surface the occasional error. |
 
-`invoke:shell_run_command` and `invoke:fs_read_file` are flagged high-risk in the
-install dialog because they can, in general, run commands and read files. This
-extension uses them only for the two purposes above; the source is in `src/`.
+`invoke:shell_run_command` and `invoke:fs_read_file` are flagged high-risk in
+the install dialog because they can, in general, run commands and read files.
+This extension uses them only for the purposes above; the source is in `src/`.
 
 ## Privacy
 
@@ -72,17 +79,22 @@ extension uses them only for the two purposes above; the source is in `src/`.
 
 ## Development
 
-The shipped artifact is a single bundled `extension.js`. Source lives in `src/`.
-
 ```bash
+git clone https://github.com/IlhamriSKY/TEDI.ai-usage.git
+cd TEDI.ai-usage
+
+# Build extension.js from src/ (generated by esbuild, not committed).
 npm install
-npm run build      # src/ -> extension.js
-npm run watch      # rebuild on change
+npm run build
+
+# Package, then install via Settings → Extensions → From file:
+zip -r dev.zip manifest.json extension.js logo.png claude.svg openai.svg README.md CHANGELOG.md LICENSE
 ```
 
-To iterate inside a TEDI checkout, drop this folder under `extensions/<id>/` and
-run `pnpm tauri:dev:ext`, then reload the window (Ctrl+R) after each build.
+To cut a release, tag `vX.Y.Z` and push. CI in
+[`.github/workflows/release.yml`](.github/workflows/release.yml) builds
+`extension.js` from `src/` and uploads the zip to the GitHub release.
 
 ## License
 
-[Apache-2.0](LICENSE) © IlhamRiski
+[Apache-2.0](LICENSE) © IlhamRiski, [tedi.ilhamriski.com](https://tedi.ilhamriski.com/)
