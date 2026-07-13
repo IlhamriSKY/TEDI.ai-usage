@@ -1,9 +1,10 @@
 // AI Usage Meter - status-bar meters for Claude Code + Codex (ChatGPT) usage.
 //
 // Two status items (claude, codex), each a provider glyph + percent + a
-// progress bar coloured by severity, with a tooltip that breaks out the 5-hour
-// and weekly windows with reset countdowns. Data sources:
-//   Claude -> ~/.claude/.credentials.json token -> api.anthropic.com oauth/usage
+// progress bar coloured by severity, with a tooltip that draws a bar for the
+// 5-hour and weekly windows plus a reset countdown. Each meter can be hidden
+// from the extension's Settings card. Data sources:
+//   Claude -> ~/.claude/.credentials.json (or macOS Keychain) -> oauth/usage
 //   Codex  -> newest ~/.codex/sessions/**/rollout-*.jsonl rate_limits snapshot
 // Runs on a 60s poll; nothing is written, only read. Modules:
 //   runtime.js   - ctx + state + home resolution
@@ -21,6 +22,23 @@ const POLL_MS = 60_000;
 export async function activate(context) {
   setCtx(context);
   state.active = true;
+
+  // Settings card: two switches to show/hide each meter.
+  ctx.contribute.settings([
+    { id: "showClaude", type: "boolean", label: "Show Claude Code meter", default: true },
+    { id: "showCodex", type: "boolean", label: "Show Codex (ChatGPT) meter", default: true },
+  ]);
+  state.showClaude = (await ctx.settings.get("showClaude")) !== false;
+  state.showCodex = (await ctx.settings.get("showCodex")) !== false;
+  // Re-render from the cached result on toggle, so hide/show is instant.
+  ctx.settings.onChange("showClaude", (v) => {
+    state.showClaude = v !== false;
+    renderClaude(state.lastClaude);
+  });
+  ctx.settings.onChange("showCodex", (v) => {
+    state.showCodex = v !== false;
+    renderCodex(state.lastCodex);
+  });
 
   // Seed both meters immediately so the icons appear while the first poll runs.
   renderClaude(null);
@@ -44,8 +62,10 @@ async function refresh() {
   ]);
   if (!state.active) return;
 
-  renderClaude(claude.status === "fulfilled" ? claude.value : null);
-  renderCodex(codex.status === "fulfilled" ? codex.value : null);
+  state.lastClaude = claude.status === "fulfilled" ? claude.value : null;
+  state.lastCodex = codex.status === "fulfilled" ? codex.value : null;
+  renderClaude(state.lastClaude);
+  renderCodex(state.lastCodex);
 }
 
 export async function deactivate() {

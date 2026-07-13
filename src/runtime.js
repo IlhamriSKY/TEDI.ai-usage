@@ -15,6 +15,13 @@ export const state = {
   home: null,
   /** Poll interval handle. */
   timer: null,
+  /** Per-meter visibility, driven by the contributed settings. */
+  showClaude: true,
+  showCodex: true,
+  /** Last usage result per provider, so a settings toggle can re-render the
+   *  meter immediately without waiting for the next poll. */
+  lastClaude: null,
+  lastCodex: null,
 };
 
 export function clearTimer() {

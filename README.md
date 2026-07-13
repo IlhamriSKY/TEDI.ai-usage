@@ -5,7 +5,7 @@ Shows your [Claude Code](https://claude.com/claude-code) and
 [TEDI](https://github.com/IlhamriSKY/TEDI) status bar: a small provider glyph, a
 percentage, and a progress bar that turns amber then red as you approach a
 limit. Hover either meter for the full breakdown, the 5-hour rolling window and
-the weekly (or monthly) window, each with a reset countdown.
+the weekly (or monthly) window, each drawn as a bar with a reset countdown.
 
 <p align="center">
   <img src="logo.png" alt="AI Usage Meter" width="96" />
@@ -14,17 +14,19 @@ the weekly (or monthly) window, each with a reset countdown.
 Two meters appear at the bottom-right, next to your other status-bar extensions:
 
 ```
-  ⓐ 8% ▓▓░░░░   ⊛ 6% ▓░░░░░
-  └ Claude       └ Codex
+  claude 8% ██░░░░░░░░   openai 6% █░░░░░░░░░
 ```
 
-Hover:
+Hover for the detail (each window as its own bar):
 
 ```
-Claude Code — Max
-5-hour: 8%  ·  resets in 3h 9m
-Weekly: 41%  ·  resets in 3h 39m
+Claude Code (Max)
+5-hour ██░░░░░░░░ 8% resets in 3h 9m
+Weekly ████░░░░░░ 41% resets in 3h 39m
 ```
+
+Each meter can be hidden individually from **Settings, Extensions, AI Usage
+Meter** (two switches: show the Claude meter, show the Codex meter).
 
 ---
 
@@ -39,7 +41,7 @@ and the only network call is to Claude's own usage endpoint.
 | **Codex** | Reads the newest `~/.codex/sessions/**/rollout-*.jsonl` and pulls the last `token_count` event's `rate_limits` (the `primary` / `secondary` windows). Codex only writes these once it makes an API call, so the meter shows the last known snapshot with an "as of …" note. Window sizes are labelled by their reported duration (5-hour / weekly / monthly / …). |
 
 The meter refreshes every 60 seconds. A provider you're not signed into (or
-haven't used) shows a muted `—`; hover it to see why.
+haven't used) shows just a dimmed icon; hover it to see why.
 
 ## Install
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.2
+
+- **Claude logo.** The Claude meter now uses the Claude mark instead of the
+  Anthropic wordmark.
+- **Progress bars in the tooltip.** Each window in the hover tooltip is drawn as
+  its own bar, for example `5-hour ██░░░░░░░░ 8% resets in 3h 9m`.
+- **Show/hide each meter.** Two switches in the extension's Settings card toggle
+  the Claude and Codex meters independently.
+- An unavailable provider now shows just a dimmed icon (no placeholder glyph),
+  and the wording drops em dashes.
+
 ## 0.1.1
 
 Fixes from a pre-release review.
@@ -24,6 +35,6 @@ Initial release.
   countdown, plus the plan name and (for Codex) how fresh the snapshot is.
 - Claude data via the OAuth usage endpoint (`five_hour` / `seven_day`); Codex
   data from the newest local rollout session's `rate_limits`.
-- 60-second refresh; muted `—` when a provider is signed out or has no data.
+- 60-second refresh; a dimmed icon when a provider is signed out or has no data.
 - Requires TEDI's status-bar progress-bar support (`label` / `progress` on a
   status item).
