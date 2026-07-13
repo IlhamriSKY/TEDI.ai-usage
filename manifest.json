@@ -1,7 +1,7 @@
 {
   "id": "tedi.ai-usage",
   "name": "AI Usage Meter",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Shows Claude Code and Codex (ChatGPT) usage in the status bar as a progress bar with a detail tooltip: the 5-hour rolling window and the weekly limit for each, plus a reset countdown. Each meter can be hidden from Settings. Reads your local CLI credentials/sessions; the only network call is to Claude's own usage endpoint.",
   "author": "IlhamRiski - ilhamriski.com",
   "homepage": "https://tedi.ilhamriski.com/",
@@ -10,6 +10,7 @@
   "permissions": [
     "statusbar:write",
     "settings:read",
+    "settings:write",
     "ui:toast",
     "invoke:fs_read_file",
     "invoke:fs_glob",
@@ -21,18 +22,30 @@
   "contributes": {
     "settings": [
       {
+        "id": "claudeAccount",
+        "type": "note",
+        "label": "Claude Code account",
+        "default": "Not signed in"
+      },
+      {
         "id": "showClaude",
         "type": "boolean",
         "label": "Show Claude Code meter",
         "default": true,
-        "description": "Claude Code 5-hour and weekly usage."
+        "description": "5-hour and weekly usage."
+      },
+      {
+        "id": "codexAccount",
+        "type": "note",
+        "label": "Codex (ChatGPT) account",
+        "default": "Not signed in"
       },
       {
         "id": "showCodex",
         "type": "boolean",
         "label": "Show Codex (ChatGPT) meter",
         "default": true,
-        "description": "Codex (ChatGPT) usage."
+        "description": "Usage windows by plan."
       }
     ]
   }

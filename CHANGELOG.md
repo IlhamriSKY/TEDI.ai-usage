@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.5
+
+- **Signed-in account shown in Settings.** Each provider now has a read-only
+  account row in the Settings card (`claude02@example.com (Max)`,
+  `you@example.com (ChatGPT Go)`) above its show/hide switch. The value is read
+  locally and synced to the Settings window through the store, backed by a new
+  read-only `note` setting type in the host and the `settings:write` permission.
+  A separate Settings window only renders manifest-declared settings, so the
+  earlier runtime-only account label never appeared there; this fixes that.
+
 ## 0.1.4
 
 - **Signed-in account in Settings.** Each provider's show/hide switch is now

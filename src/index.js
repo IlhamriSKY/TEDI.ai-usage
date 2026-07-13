@@ -54,7 +54,10 @@ export async function activate(context) {
         readClaudeAccount(home),
         readCodexAccount(home),
       ]);
-      contributeSettings(claudeAcc, codexAcc);
+      // The account rows are read-only "note" settings declared in the manifest;
+      // their values sync to the (separate) Settings window through the store.
+      await ctx.settings.set("claudeAccount", accountLine(claudeAcc, "claude"));
+      await ctx.settings.set("codexAccount", accountLine(codexAcc, "codex"));
     } catch (err) {
       ctx.logger?.info?.("account read failed", err);
     }
@@ -83,32 +86,12 @@ async function refresh() {
   renderCodex(state.lastCodex);
 }
 
-// Re-declare the two switches with the signed-in account in each description.
-// Replaces the manifest-declared pair (same ids) with the enriched version.
-function contributeSettings(claudeAcc, codexAcc) {
-  ctx.contribute.settings([
-    {
-      id: "showClaude",
-      type: "boolean",
-      label: "Show Claude Code meter",
-      default: true,
-      description: accountLine(claudeAcc, "claude"),
-    },
-    {
-      id: "showCodex",
-      type: "boolean",
-      label: "Show Codex (ChatGPT) meter",
-      default: true,
-      description: accountLine(codexAcc, "codex"),
-    },
-  ]);
-}
-
+// The value shown in a provider's read-only "note" row: "<email> (<plan>)".
 function accountLine(acc, provider) {
-  if (!acc || !acc.signedIn) return "Not signed in.";
+  if (!acc || !acc.signedIn) return "Not signed in";
   const who = acc.email || "Signed in";
   const plan = acc.plan ? ` (${planLabel(acc.plan, provider)})` : "";
-  return `Signed in: ${who}${plan}`;
+  return `${who}${plan}`;
 }
 
 function planLabel(plan, provider) {
