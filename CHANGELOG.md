@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.4
+
+- **Signed-in account in Settings.** Each provider's show/hide switch is now
+  labelled with the account and plan it reads, for example
+  `Signed in: you@example.com (Max)` and `Signed in: you@example.com (ChatGPT Go)`.
+  Claude from `~/.claude.json`, Codex from the `~/.codex/auth.json` id_token.
+- The two switches are declared in the manifest (`contributes.settings`) so the
+  card shows even before the extension finishes loading, matching the other TEDI
+  extensions.
+- A missing `settings:read` permission no longer blocks the meters; they fall
+  back to showing both.
+- **Pixel-style bars** (host render): the pill and the tooltip windows draw as
+  blocky segments. Amber means about to run out, red means spent, so the colour
+  is an at-a-glance indicator.
+
 ## 0.1.3
 
 - **Real progress bars in the tooltip.** Each window now renders as a graphical
