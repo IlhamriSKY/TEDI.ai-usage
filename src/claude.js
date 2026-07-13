@@ -1,0 +1,74 @@
+// Claude Code usage. Reads the local OAuth token from
+// `~/.claude/.credentials.json` and asks Anthropic's undocumented,
+// community-discovered usage endpoint for the same numbers `/usage` shows:
+// the 5-hour rolling window and the 7-day window, each a utilization percent
+// plus a reset timestamp. Returns `{ ok:false, reason }` on any failure so the
+// meter degrades quietly.
+
+import { ctx } from "./runtime.js";
+
+const USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
+
+export async function readClaudeUsage(home, platform) {
+  const token = await readToken(home);
+  if (!token.accessToken) return { ok: false, reason: token.reason || "not-signed-in" };
+
+  const json = await curlUsage(token.accessToken, platform);
+  if (!json) return { ok: false, reason: "unreachable", plan: token.plan };
+  if (json.error) {
+    const reason = json.error.type === "rate_limit_error" ? "rate-limited" : "error";
+    return { ok: false, reason, plan: token.plan };
+  }
+
+  const fh = json.five_hour || {};
+  const wk = json.seven_day || {};
+  return {
+    ok: true,
+    plan: token.plan,
+    fiveHour: pct(fh.utilization) != null ? { pct: pct(fh.utilization), resetsAt: fh.resets_at || null } : null,
+    weekly: pct(wk.utilization) != null ? { pct: pct(wk.utilization), resetsAt: wk.resets_at || null } : null,
+  };
+}
+
+async function readToken(home) {
+  const path = `${home}/.claude/.credentials.json`;
+  try {
+    const res = await ctx.invoke("fs_read_file", { path });
+    if (res?.kind !== "text" || !res.content) return { reason: "not-signed-in" };
+    const oauth = JSON.parse(res.content)?.claudeAiOauth || {};
+    return { accessToken: oauth.accessToken || null, plan: oauth.subscriptionType || null };
+  } catch {
+    return { reason: "not-signed-in" };
+  }
+}
+
+// WebView2 / WKWebView enforce CORS on remote-origin `fetch`, and the custom
+// `anthropic-beta` header forces a preflight the endpoint won't answer - so the
+// GET is routed through curl on the native side instead of `fetch`.
+async function curlUsage(accessToken, platform) {
+  // PowerShell aliases bare `curl` to Invoke-WebRequest, so call `curl.exe` on
+  // Windows; every supported OS ships a real curl. Single-quoted args are
+  // literal in both PowerShell and POSIX sh, so no `$`/space expansion bites us.
+  // ponytail: token in argv - a local single-user desktop, same trust boundary
+  // as the plaintext credentials file it came from; not worth a temp-config dance.
+  const curl = platform === "windows" ? "curl.exe" : "curl";
+  const cmd =
+    `${curl} -s --max-time 20 ` +
+    `-H 'Authorization: Bearer ${accessToken}' ` +
+    `-H 'anthropic-beta: oauth-2025-04-20' ` +
+    `-H 'Content-Type: application/json' ` +
+    `'${USAGE_URL}'`;
+  try {
+    const out = await ctx.invoke("shell_run_command", { command: cmd, cwd: null, timeoutSecs: 25 });
+    const body = String(out?.stdout ?? "").trim();
+    if (!body) return null;
+    return JSON.parse(body);
+  } catch (err) {
+    ctx?.logger?.info?.("claude usage curl failed", err);
+    return null;
+  }
+}
+
+function pct(x) {
+  return typeof x === "number" && isFinite(x) ? x : null;
+}
