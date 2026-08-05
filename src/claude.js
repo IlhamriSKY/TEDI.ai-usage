@@ -89,7 +89,7 @@ async function curlUsage(accessToken, platform) {
   // literal in both PowerShell and POSIX sh, so no `$`/space expansion bites us.
   // `-D -` dumps the response headers to stdout (for the status + Retry-After),
   // then the body, then a trailing `HTTPSTATUS:<code>` from `-w`.
-  // ponytail: token in argv - a local single-user desktop, same trust boundary
+  // Known limit: token in argv - a local single-user desktop, same trust boundary
   // as the plaintext credentials file it came from; not worth a temp-config dance.
   const curl = platform === "windows" ? "curl.exe" : "curl";
   const cmd =

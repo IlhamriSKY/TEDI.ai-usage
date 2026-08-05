@@ -38,7 +38,7 @@ export function clearTimer() {
 // `echo $HOME` prints the home dir in BOTH POSIX sh (`-lc`) and PowerShell
 // (`-Command`) - the two shells `shell_run_command` uses. On the rare cmd.exe
 // fallback `$HOME` stays literal, which we detect and treat as "no home".
-// ponytail: cmd.exe fallback yields no home; the meters simply never appear.
+// Known limit: cmd.exe fallback yields no home; the meters simply never appear.
 export async function resolveHome() {
   if (state.home) return state.home;
   try {
