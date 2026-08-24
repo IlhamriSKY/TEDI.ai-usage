@@ -21,6 +21,7 @@ import { renderClaude, renderCodex, removeAll } from "./statusbar.js";
 const POLL_MS = 5 * 60_000;
 const RATE_LIMIT_COOLDOWN_MS = 15 * 60_000;
 
+/** @param {import("../tedi").ExtensionContext} context */
 export async function activate(context) {
   setCtx(context);
   state.active = true;

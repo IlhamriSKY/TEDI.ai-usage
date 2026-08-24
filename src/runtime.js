@@ -3,6 +3,7 @@
 // mutate through the setters here (mirrors the discord/sql-explorer pattern).
 // Keep this the ONE owner of the state so no module duplicates it.
 
+/** @type {import("../tedi").ExtensionContext | null} */
 export let ctx = null;
 export function setCtx(value) {
   ctx = value;
