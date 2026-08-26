@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.8
+
+### Added
+
+- **Click a meter to refresh it now.** Each meter is a real focusable button rather than a decorative icon, so a click polls immediately instead of waiting out the rest of the five-minute interval, and the tooltip says "Click to refresh" (or "Refreshing…" while one is in flight). A manual refresh deliberately ignores the Claude 429 back-off: you asked for fresh numbers, and if the endpoint is still throttling, the same answer re-arms the cooldown. A second click while a poll is running is ignored rather than queued.
+
+### Changed
+
+- `kind: "status"` is now declared explicitly on both meters. The host infers "action" from a bare icon plus a click handler, which would have moved a meter into the buttons group for exactly as long as its data was missing — so the inference is right for a button and wrong for a readout that happens to be clickable.
+- `engines.tedi` raised to `>=0.4.7`, the release that added `StatusItem.kind`. `onClick` alone landed in 0.3.92, but without `kind` the meters would drift between status-bar groups on 0.3.92–0.4.6.
+
+### Removed
+
+- The `ui:toast` permission. Nothing used it, and a permission you do not need is one the install review should not be asking anyone to approve.
+
 ## 0.1.7
 
 ### Changed

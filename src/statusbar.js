@@ -35,9 +35,19 @@ export function removeAll() {
 }
 
 function setMeter(id, icon, u, head5h, headWeek, view) {
+  // `onClick` makes the host render a real focusable button, so the meter IS
+  // the refresh control and no second status item competes for bar space.
+  const onClick = state.onRefresh ?? undefined;
+  const hint = state.refreshing ? "Refreshing..." : "Click to refresh";
+  const tooltip = `${view.tooltip}\n${hint}`;
+  if (view.detail) view.detail.rows.push({ label: "", note: hint });
+
   if (!u || !u.ok) {
     // Unavailable: just the dimmed brand icon, the tooltip explains why.
-    ctx.statusBar.setItem({ id, icon, tone: "default", tooltip: view.tooltip });
+    // `kind` is explicit because the host infers "action" from a bare
+    // icon + onClick, which would move the meter to the buttons group for
+    // exactly as long as its data is missing.
+    ctx.statusBar.setItem({ id, icon, tone: "default", tooltip, onClick, kind: "status" });
     return;
   }
   const head = head5h || headWeek; // headline = 5-hour window, else weekly
@@ -48,8 +58,10 @@ function setMeter(id, icon, u, head5h, headWeek, view) {
     tone: toneFor(worst),
     label: head ? `${Math.round(head.pct)}%` : undefined,
     progress: head ? clamp01(head.pct / 100) : undefined,
-    tooltip: view.tooltip,
+    tooltip,
     detail: view.detail,
+    onClick,
+    kind: "status",
   });
 }
 

@@ -27,6 +27,12 @@ export const state = {
   /** Epoch ms until which Claude polling is paused after a rate-limit (429),
    *  so we don't prolong the throttle. */
   claudeCooldownUntil: 0,
+  /** True while a poll is in flight, so a second click is ignored and the
+   *  tooltip can say so. */
+  refreshing: false,
+  /** Set by activate(): what a click on a meter runs. Lives here rather than
+   *  being imported from index.js so statusbar.js does not close a cycle. */
+  onRefresh: null,
 };
 
 export function clearTimer() {

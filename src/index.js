@@ -45,6 +45,11 @@ export async function activate(context) {
     ctx.logger?.info?.("settings unavailable, showing both meters", err);
   }
 
+  // A meter is a real button: clicking it polls now instead of waiting out the
+  // rest of the 5-minute interval. Registered before the first render so the
+  // seeded icons are already clickable.
+  state.onRefresh = refreshNow;
+
   // Seed both meters immediately so the icons appear while the first poll runs.
   renderClaude(null);
   renderCodex(null);
@@ -91,16 +96,42 @@ export async function activate(context) {
   if (state.active) state.timer = setInterval(refresh, POLL_MS);
 }
 
-async function refresh() {
+/**
+ * Poll now, from a click on a meter.
+ *
+ * A manual refresh clears the 429 back-off: the user asked for fresh numbers,
+ * and if the endpoint is still throttling, `refresh` re-arms the cooldown from
+ * that same answer. Re-renders on the way in so the tooltip says it is working
+ * rather than the bar looking inert for a couple of seconds.
+ */
+async function refreshNow() {
+  if (!state.active || state.refreshing) return;
+  state.refreshing = true;
+  renderClaude(state.lastClaude);
+  renderCodex(state.lastCodex);
+  try {
+    await refresh(true);
+  } finally {
+    state.refreshing = false;
+    if (state.active) {
+      renderClaude(state.lastClaude);
+      renderCodex(state.lastCodex);
+    }
+  }
+}
+
+/** @param {boolean} [manual] true when a click asked for it, which bypasses the
+ *  Claude rate-limit back-off. */
+async function refresh(manual) {
   if (!state.active) return;
   const home = await resolveHome();
   if (!home || !state.active) return;
 
   const platform = ctx?.os?.platform ?? "unknown";
   // Skip the Claude network call while backing off from a 429; Codex is a local
-  // read and always runs.
+  // read and always runs. A manual refresh ignores the back-off.
   const claudeP =
-    Date.now() < state.claudeCooldownUntil
+    !manual && Date.now() < state.claudeCooldownUntil
       ? Promise.resolve(null)
       : readClaudeUsage(home, platform);
   const [claude, codex] = await Promise.allSettled([claudeP, readCodexUsage(home)]);
