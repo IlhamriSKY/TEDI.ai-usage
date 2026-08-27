@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.9
+
+### Fixed
+
+- **A Codex meter kept showing a percentage its window had already reset past.** Codex writes a rate-limit snapshot into its session log and then stops, so a file from last month still holds "41% used" long after every window it described has rolled over. The meter read that number and painted it as current. A window whose reset time has passed is now treated as no data at all, the countdown is recomputed from the absolute reset time so it ticks down instead of replaying whatever was written, and the snapshot is dated from the event's own timestamp rather than the filename, which had been dating a long session's last reading to when it started.
+- **An empty Codex meter painted a reassuring green bar over an unknown.** No headline window means no data, not zero percent used, so the bar stays neutral and the tooltip distinguishes the two cases: never recorded, versus recorded but since reset, which says to run Codex once to refresh.
+
 ## 0.1.8
 
 ### Added

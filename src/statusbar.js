@@ -55,7 +55,9 @@ function setMeter(id, icon, u, head5h, headWeek, view) {
   ctx.statusBar.setItem({
     id,
     icon,
-    tone: toneFor(worst),
+    // No headline window means no data, not 0% used - stay neutral rather
+    // than painting a reassuring green bar over an unknown.
+    tone: head ? toneFor(worst) : "default",
     label: head ? `${Math.round(head.pct)}%` : undefined,
     progress: head ? clamp01(head.pct / 100) : undefined,
     tooltip,
@@ -112,8 +114,13 @@ function codexView(u) {
   const asOf = u.capturedAt ? `as of ${ago(u.capturedAt)}` : null;
 
   if (!windows.length) {
-    const text = `${title}\nNo usage recorded yet${asOf ? `\n${asOf}` : ""}`;
-    return { tooltip: text, detail: { title, rows: [{ label: "", note: "No usage recorded yet" }] } };
+    // `expired` = Codex did record a percentage, but its window has since
+    // reset, so the file still holds a number that describes nothing now.
+    const note = u.expired
+      ? "Usage window has reset. Run Codex once to refresh."
+      : "No usage recorded yet";
+    const text = `${title}\n${note}${asOf ? `\n${asOf}` : ""}`;
+    return { tooltip: text, detail: { title, rows: [{ label: "", note }] } };
   }
   const text = textTooltip(title, windows) + (asOf ? `\n${asOf}` : "");
   const detail = detailTooltip(title, windows);

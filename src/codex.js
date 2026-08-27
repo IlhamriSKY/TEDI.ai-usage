@@ -24,12 +24,19 @@ export async function readCodexUsage(home) {
   for (const path of paths.slice(0, 6)) {
     const snap = await lastRateLimits(path);
     if (snap) {
+      const capturedAt = snap.ts ?? tsFromName(path);
+      const primary = win(snap.rl.primary, capturedAt);
+      const secondary = win(snap.rl.secondary, capturedAt);
+      const hadPct = [snap.rl.primary, snap.rl.secondary].some((w) => w && w.used_percent != null);
       return {
         ok: true,
-        plan: snap.plan_type || snap.limit_id || null,
-        primary: win(snap.primary),
-        secondary: win(snap.secondary),
-        capturedAt: tsFromName(path),
+        plan: snap.rl.plan_type || snap.rl.limit_id || null,
+        primary,
+        secondary,
+        // Every window the snapshot carried has rolled over since it was
+        // written, so there is a number on disk but it means nothing now.
+        expired: hadPct && !primary && !secondary,
+        capturedAt,
       };
     }
   }
@@ -58,24 +65,49 @@ async function lastRateLimits(path) {
       continue;
     }
     const rl = obj?.payload?.rate_limits || obj?.payload?.info?.rate_limits || obj?.rate_limits;
-    if (rl && (rl.primary || rl.secondary)) return rl;
+    if (rl && (rl.primary || rl.secondary)) {
+      // The event's own timestamp, not the filename's: a session that ran for
+      // hours would otherwise date its last snapshot to when it started.
+      const ts = Date.parse(obj?.timestamp);
+      return { rl, ts: isFinite(ts) ? ts : null };
+    }
   }
   return null;
 }
 
 // One window object: `{ used_percent, window_minutes, resets_in_seconds }`.
 // Parsed defensively (also accepts `resets_at` / `percent`) since the live
-// non-null shape can only be confirmed against a fresh session.
-function win(w) {
+// non-null shape can only be confirmed against a fresh session. Returns null
+// for a window whose reset time has already passed - see below.
+function win(w, capturedAt) {
   if (!w || typeof w !== "object") return null;
   const p = num(w.used_percent) ?? num(w.percent_used) ?? num(w.percent);
   if (p == null) return null;
+  const secs = num(w.resets_in_seconds);
+  const at = resetMs(w.resets_at) ?? (secs != null && capturedAt ? capturedAt + secs * 1000 : null);
+  // A snapshot outlives its own window: Codex writes the file and stops, so a
+  // month-old 41% survives every reset that happened since. Once the window has
+  // rolled over the number is dead, and showing nothing beats showing a lie.
+  if (at != null && at <= Date.now()) return null;
   return {
     pct: p,
     windowMinutes: num(w.window_minutes),
-    resetsInSeconds: num(w.resets_in_seconds),
-    resetsAt: typeof w.resets_at === "string" ? w.resets_at : null,
+    // Recomputed from the absolute reset time so the countdown ticks down
+    // instead of replaying whatever it read when the snapshot was written.
+    resetsInSeconds: at != null ? Math.max(0, Math.round((at - Date.now()) / 1000)) : secs,
+    resetsAt: at != null ? new Date(at).toISOString() : null,
   };
+}
+
+// `resets_at` is epoch SECONDS on the plans seen so far; accept epoch ms and an
+// ISO string too rather than betting on one shape.
+function resetMs(v) {
+  if (typeof v === "number" && isFinite(v)) return v > 1e11 ? v : v * 1000;
+  if (typeof v === "string") {
+    const t = Date.parse(v);
+    return isFinite(t) ? t : null;
+  }
+  return null;
 }
 
 function num(x) {

@@ -8,6 +8,7 @@
     "build": "node build.mjs",
     "watch": "node build.mjs --watch",
     "check": "node --check extension.js",
+    "test": "node src/codex.test.mjs",
     "typecheck": "tsc -p jsconfig.json"
   },
   "devDependencies": {
