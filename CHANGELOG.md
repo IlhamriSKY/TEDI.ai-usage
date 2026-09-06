@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.11
+
+### Changed
+
+- **The reset countdown is back on its window's own row**, where it belongs: one window is one line — label, bar, percentage, countdown. 0.1.10 had split it onto a second line to escape the popover edge, which fixed the clipping by breaking a single fact in half. The real fix is in the host: TEDI 0.4.43 widens a status tooltip that carries a structured detail, so "Monthly ▓▓▓░░░░░░░ 41% resets in 29d 4h" fits on its row. On an older TEDI the countdown can still be clipped; the plain-text tooltip always carries it in full.
+
 ## 0.1.10
 
 ### Changed

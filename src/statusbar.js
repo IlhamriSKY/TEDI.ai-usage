@@ -149,22 +149,20 @@ function detailTooltip(title, windows) {
   for (const [label, w] of windows) {
     if (!w || w.pct == null) {
       rows.push({ label, note: "no data" });
-      continue;
+    } else {
+      // One window, one line: label, bar, percentage, countdown. The countdown
+      // briefly lived on a line of its own to escape being clipped by the
+      // popover edge, but that split a single fact across two rows; the fix
+      // belongs in the box, and TEDI 0.4.43 widens a detail tooltip so a long
+      // Codex window ("Monthly ... resets in 29d 4h") fits on its row.
+      rows.push({
+        label,
+        progress: clamp01(w.pct / 100),
+        tone: toneFor(w.pct),
+        value: `${Math.round(w.pct)}%`,
+        note: resetNote(w),
+      });
     }
-    rows.push({
-      label,
-      progress: clamp01(w.pct / 100),
-      tone: toneFor(w.pct),
-      value: `${Math.round(w.pct)}%`,
-    });
-    // The countdown goes on its OWN line rather than trailing the bar. A row is
-    // a fixed layout - a 56 px label, ten bar cells, then a value and a note
-    // that both refuse to shrink - so "Monthly [bar] 41% resets in 29d 4h" ran
-    // past the popover edge and was clipped mid-word. Codex is where that bites
-    // (its windows are plan-dependent and can be 30 days), but both providers
-    // get the same shape: the pair of meters has to read identically.
-    const reset = resetNote(w);
-    if (reset) rows.push({ label: "", note: reset });
   }
   return { title, rows };
 }

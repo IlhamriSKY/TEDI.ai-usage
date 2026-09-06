@@ -2,7 +2,7 @@
   "$schema": "./manifest.schema.json",
   "id": "tedi.ai-usage",
   "name": "AI Usage Meter",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Shows Claude Code and Codex (ChatGPT) usage in the status bar as a progress bar with a detail tooltip: the 5-hour rolling window and the weekly limit for each, plus a reset countdown. Click a meter to refresh it now. Each meter can be hidden from Settings. Reads your local CLI credentials/sessions; the only network call is to Claude's own usage endpoint.",
   "author": "IlhamRiski - ilhamriski.com",
   "homepage": "https://tedi.ilhamriski.com/",
