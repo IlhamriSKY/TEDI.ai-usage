@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.10
+
+### Changed
+
+- **The reset countdown moved to a line of its own.** A detail row is a fixed layout — a 56 px label, ten bar cells, then a value and a note that both refuse to shrink — so "Monthly ▓▓▓░░░░░░░ 41% resets in 29d 4h" ran past the edge of the popover and was clipped mid-word. Codex is where that bites, because its windows are plan-dependent and can be thirty days, but both providers get the same treatment: the pair of meters sits side by side and has to read identically.
+
 ## 0.1.9
 
 ### Fixed
