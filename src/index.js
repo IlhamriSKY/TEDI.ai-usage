@@ -2,18 +2,21 @@
 //
 // Two status items (claude, codex), each a provider glyph + percent + a pixel
 // progress bar coloured by severity, with a tooltip that draws a bar for the
-// 5-hour and weekly windows plus a reset countdown. The Settings card has a
-// show/hide switch per provider, each labelled with the signed-in account.
+// 5-hour and weekly windows plus a reset countdown, over a year of daily
+// activity as a contribution grid. The Settings card has a show/hide switch per
+// provider, each labelled with the signed-in account.
 // Data sources:
 //   Claude -> ~/.claude/.credentials.json (or macOS Keychain) -> oauth/usage
 //   Codex  -> newest ~/.codex/sessions/**/rollout-*.jsonl rate_limits snapshot
+//   Activity -> ~/.claude/history.jsonl + the Codex rollout filenames
 //   Accounts -> ~/.claude.json + ~/.codex/auth.json (id_token)
-// Runs on a 60s poll; nothing is written, only read.
+// Runs on a 5-minute poll; nothing is written, only read.
 
 import { ctx, setCtx, state, clearTimer, resolveHome } from "./runtime.js";
 import { readClaudeUsage } from "./claude.js";
 import { readCodexUsage } from "./codex.js";
 import { readClaudeAccount, readCodexAccount } from "./accounts.js";
+import { readClaudeDays } from "./history.js";
 import { renderClaude, renderCodex, removeAll } from "./statusbar.js";
 
 // The Claude usage endpoint 429s aggressively at 30-60s (a known Claude Code
@@ -126,6 +129,11 @@ async function refresh(manual) {
   if (!state.active) return;
   const home = await resolveHome();
   if (!home || !state.active) return;
+
+  // The heatmap is a day-resolution view of a 1.5 MB append-only log, so it is
+  // read at startup and then only when a click asks for fresh numbers. Polling
+  // it every five minutes would re-read the whole file to redraw the same grid.
+  if (manual || !state.claudeDays) state.claudeDays = await readClaudeDays(home);
 
   const platform = ctx?.os?.platform ?? "unknown";
   // Skip the Claude network call while backing off from a 429; Codex is a local

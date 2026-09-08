@@ -5,10 +5,12 @@
 // still turns the pill red. Each meter honours its show/hide setting.
 //
 // The tooltip is provided two ways: `detail` (structured, rendered as real
-// bars) and `tooltip` (a plain-text summary kept as the accessible label and a
-// fallback on hosts that don't render `detail`).
+// bars, with the activity heatmap above them) and `tooltip` (a plain-text
+// summary kept as the accessible label and a fallback on hosts that don't
+// render `detail`).
 
 import { ctx, state } from "./runtime.js";
+import { heatmap } from "./activity.js";
 
 const CLAUDE_ID = "claude";
 const CODEX_ID = "codex";
@@ -18,7 +20,8 @@ export function renderClaude(u) {
     ctx.statusBar.removeItem(CLAUDE_ID);
     return;
   }
-  setMeter(CLAUDE_ID, "claude.svg", u, u ? u.fiveHour : null, u ? u.weekly : null, claudeView(u));
+  const view = claudeView(u, heatmap(state.claudeDays, "prompts"));
+  setMeter(CLAUDE_ID, "claude.svg", u, u ? u.fiveHour : null, u ? u.weekly : null, view);
 }
 
 export function renderCodex(u) {
@@ -26,7 +29,10 @@ export function renderCodex(u) {
     ctx.statusBar.removeItem(CODEX_ID);
     return;
   }
-  setMeter(CODEX_ID, "openai.svg", u, u ? u.primary : null, u ? u.secondary : null, codexView(u));
+  // Codex counts SESSIONS, not prompts: a rollout file is one `codex` run, and
+  // the filename is the only timestamp available without reading 86 MB of logs.
+  const view = codexView(u, heatmap(u?.days, "sessions"));
+  setMeter(CODEX_ID, "openai.svg", u, u ? u.primary : null, u ? u.secondary : null, view);
 }
 
 export function removeAll() {
@@ -43,11 +49,21 @@ function setMeter(id, icon, u, head5h, headWeek, view) {
   if (view.detail) view.detail.rows.push({ label: "", note: hint });
 
   if (!u || !u.ok) {
-    // Unavailable: just the dimmed brand icon, the tooltip explains why.
+    // Unavailable: just the dimmed brand icon, the tooltip explains why. The
+    // detail still goes along, because the heatmap is local history and does
+    // not depend on the live number that is missing.
     // `kind` is explicit because the host infers "action" from a bare
     // icon + onClick, which would move the meter to the buttons group for
     // exactly as long as its data is missing.
-    ctx.statusBar.setItem({ id, icon, tone: "default", tooltip, onClick, kind: "status" });
+    ctx.statusBar.setItem({
+      id,
+      icon,
+      tone: "default",
+      tooltip,
+      detail: view.detail,
+      onClick,
+      kind: "status",
+    });
     return;
   }
   const head = head5h || headWeek; // headline = 5-hour window, else weekly
@@ -78,20 +94,40 @@ function toneFor(p) {
 
 const clamp01 = (n) => Math.max(0, Math.min(1, n));
 
-// ---- views: { tooltip: string, detail?: { title, rows } } -----------------
+// ---- views: { tooltip: string, detail?: { title, rows, chart } } ----------
 
-function claudeView(u) {
+function claudeView(u, chart) {
   const title = "Claude Code" + (u?.plan ? ` (${cap(u.plan)})` : "");
-  if (!u) return { tooltip: `${title}\nLoading...` };
-  if (!u.ok) return { tooltip: `${title}\n${reasonText(u.reason, "claude")}` };
+  if (!u) return withChart({ tooltip: `${title}\nLoading...` }, title, chart, "Loading...");
+  if (!u.ok) {
+    const note = reasonText(u.reason, "claude");
+    return withChart({ tooltip: `${title}\n${note}` }, title, chart, note);
+  }
   const windows = [
     ["5-hour", u.fiveHour],
     ["Weekly", u.weekly],
   ];
-  return markStale(
+  const view = markStale(
     { tooltip: textTooltip(title, windows), detail: detailTooltip(title, windows) },
     u,
   );
+  return withChart(view, title, chart);
+}
+
+/**
+ * Hang the activity heatmap above the rows.
+ *
+ * It rides along even when the live numbers are missing: the grid is built from
+ * local history, so a rate-limited or not-yet-signed-in meter still shows the
+ * year, with `note` (the reason) as its only row. The caption also goes into
+ * the plain-text tooltip, which is what a screen reader gets.
+ */
+function withChart(view, title, chart, note) {
+  if (!chart) return view;
+  view.detail = view.detail ?? { title, rows: note ? [{ label: "", note }] : [] };
+  view.detail.chart = chart;
+  view.tooltip += `\n${chart.label}: ${chart.note}`;
+  return view;
 }
 
 // When a value is the last-known one kept across a transient failure (e.g. a
@@ -104,10 +140,13 @@ function markStale(view, u) {
   return view;
 }
 
-function codexView(u) {
+function codexView(u, chart) {
   const title = "Codex" + (u?.plan ? ` (ChatGPT ${cap(u.plan)})` : " (ChatGPT)");
-  if (!u) return { tooltip: `${title}\nLoading...` };
-  if (!u.ok) return { tooltip: `${title}\n${reasonText(u.reason, "codex")}` };
+  if (!u) return withChart({ tooltip: `${title}\nLoading...` }, title, chart, "Loading...");
+  if (!u.ok) {
+    const note = reasonText(u.reason, "codex");
+    return withChart({ tooltip: `${title}\n${note}` }, title, chart, note);
+  }
   // Codex window sizes vary by plan (5-hour / weekly / 30-day / ...), so label
   // each by its own `window_minutes` rather than assuming 5h + weekly.
   const windows = [];
@@ -123,12 +162,13 @@ function codexView(u) {
       ? "Usage window has reset. Run Codex once to refresh."
       : "No usage recorded yet";
     const text = `${title}\n${note}${asOf ? `\n${asOf}` : ""}`;
-    return { tooltip: text, detail: { title, rows: [{ label: "", note }] } };
+    const view = { tooltip: text, detail: { title, rows: [{ label: "", note }] } };
+    return withChart(view, title, chart);
   }
   const text = textTooltip(title, windows) + (asOf ? `\n${asOf}` : "");
   const detail = detailTooltip(title, windows);
   if (asOf) detail.rows.push({ label: "", note: asOf });
-  return markStale({ tooltip: text, detail }, u);
+  return withChart(markStale({ tooltip: text, detail }, u), title, chart);
 }
 
 function textTooltip(title, windows) {

@@ -24,6 +24,11 @@ export const state = {
    *  value across a transient failure (marked `stale`). */
   lastClaude: null,
   lastCodex: null,
+  /** Prompts per local day from `~/.claude/history.jsonl`, for the heatmap.
+   *  Read once at startup and again on a click, not on every poll: it is a
+   *  1.5 MB file behind a chart that only changes once a day. Codex needs no
+   *  equivalent, its dates come free with the session glob. */
+  claudeDays: null,
   /** Epoch ms until which Claude polling is paused after a rate-limit (429),
    *  so we don't prolong the throttle. */
   claudeCooldownUntil: 0,

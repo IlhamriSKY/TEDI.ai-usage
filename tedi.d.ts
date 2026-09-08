@@ -163,6 +163,12 @@ export type AppContextTerminal = {
   /** Host-captured, glyph-stripped OSC 0/2 window title. Prefer this over
    *  re-deriving a title from the byte stream. */
   title?: string;
+  /** True when the tab this terminal lives in is pinned. */
+  pinned?: boolean;
+  /** The user's own name for the tab (absent = the derived one). Kept separate
+   *  from `title`, which is whatever a running program set as its window
+   *  title. */
+  customTitle?: string;
   wsId?: string;
   wsName?: string;
   wsActive?: boolean;
@@ -176,6 +182,9 @@ export type AppContextSnapshot = {
    *  "all open terminals" is what you mean. */
   terminalCount: number;
   /** Kind of the focused tab. `null` when no tab is active. */
+  /** `"browser"` is not reported: a browser is an extension, so its pane
+   *  reports `"ext"` like any other. Kept in the union so an extension that
+   *  branches on it still type-checks. */
   activeTabKind: "terminal" | "ssh" | "editor" | "diff" | "browser" | "ext" | null;
   /** Workspaces the user has open. Always >= 1. */
   workspaceCount: number;
@@ -272,6 +281,52 @@ export type SafeSshConnection = {
  * progress bar, an optional value, and a muted trailing note. A row with an
  * empty `label` and no `progress` renders as a plain footer line.
  */
+/**
+ * A pixel chart drawn above a {@link StatusItem} `detail`'s rows: one column
+ * per sample, oldest first, on the same 4 px grid the status bar's meters use.
+ * The host does no scaling - each value is already 0..1 - because only you know
+ * whether your axis starts at zero, auto-fits a window, or tracks a budget.
+ *
+ * At most the newest 48 columns are drawn: that is the widest grid the
+ * tooltip's popover holds without wrapping. A `cells` grid gets 53, a full year
+ * of weeks, which the wider popover affords.
+ */
+export type StatusItemDetailChart = {
+  /** Oldest first, newest last. Each 0..1; 0 draws an empty column, so a gap in
+   *  the data and a value at the floor stay distinguishable. */
+  values: number[];
+  /** How `values` are laid out.
+   *
+   *  `"columns"` (the default) is a trend: one column per value, filled from
+   *  the bottom, so the shape reads as a line.
+   *
+   *  `"cells"` is a calendar: one CELL per value, filling each column top to
+   *  bottom before moving right, its shade set by the value. That is the GitHub
+   *  contribution grid - `rows: 7` and a value per day draws a year of
+   *  activity. Send a multiple of `rows` values, oldest cell first, or the
+   *  columns come out misaligned. */
+  mode?: "columns" | "cells";
+  /** Cells mode: one label per COLUMN, in a caption row above the grid. Null
+   *  or empty leaves a column unlabelled, which is how a month name sits over
+   *  the week it starts in instead of repeating 53 times. Labels are placed on
+   *  the column pitch and may overhang to the right, so leave a few columns
+   *  between them. */
+  columnLabels?: (string | null)[];
+  /** Cells mode: one label per VALUE, e.g. `"Mon, 8 Sep - 14 prompts"`. Shown
+   *  in place of `note` while the pointer is over that cell. A grid of 371
+   *  squares has no room for a date axis; this is how it answers "which day is
+   *  that?" anyway. */
+  cellLabels?: (string | null)[];
+  /** Fill colour, same palette as `StatusItem.tone`. */
+  tone?: "default" | "success" | "warning" | "error";
+  /** Grid height in cells. Clamped to 3..16, default 8. */
+  rows?: number;
+  /** Caption under the grid, left (e.g. `"last 3 min"`). */
+  label?: string;
+  /** Caption under the grid, right (e.g. `"peak 6.0G · low 4.8G"`). */
+  note?: string;
+};
+
 export type StatusItemDetailRow = {
   label: string;
   /** 0..1 fill; when set the row draws a themed progress bar. */
@@ -301,11 +356,18 @@ export type StatusItem = {
   /** Short text after the icon (e.g. `"62%"`). Keep it tiny; put the full
    *  story in `tooltip` or `detail`. */
   label?: string;
-  /** 0..1 fill. Renders a compact themed progress bar after the icon/label. */
+  /** 0..1 fill. Renders a compact themed progress bar after the icon/label.
+   *
+   *  It also decides PLACEMENT: an extension that publishes any metered item
+   *  sorts before the icon-only ones (then by extension id), so the readouts
+   *  group together instead of being scattered among the state lights, and the
+   *  compact bar keeps exactly these. The rank is per extension, so one meter
+   *  going temporarily unavailable does not move its siblings. */
   progress?: number;
   /** Structured tooltip. When set it replaces the plain `tooltip` string in
-   *  the popover (which stays the aria-label and the fallback). */
-  detail?: { title?: string; rows: StatusItemDetailRow[] };
+   *  the popover (which stays the aria-label and the fallback). `chart` adds a
+   *  pixel trend above the rows. */
+  detail?: { title?: string; rows: StatusItemDetailRow[]; chart?: StatusItemDetailChart };
   /** When set the item renders as a real focusable `<button>` instead of a
    *  decorative span. Prefer this over document-wide click listeners. */
   onClick?: () => void;
@@ -437,7 +499,7 @@ export type SidebarSection = {
 // ---------------------------------------------------------------------------
 
 /** `bash` = hidden agent shells (`bash_run` / `bash_background`);
- *  `terminal` = visible PTY injections (`suggest_command` / `run_in_terminal`). */
+ *  `terminal` = the visible PTY (the `sh` MCP tool, `schedule_command`). */
 export type ShellCommandKind = "bash" | "terminal";
 
 /**
@@ -446,6 +508,19 @@ export type ShellCommandKind = "bash" | "terminal";
  * the original string to pass through. Non-string returns are dropped and the
  * call is wrapped in try/catch.
  */
+/** One row of Settings → Terminal → Additional PATH. */
+export type TerminalPathEntry = {
+  /** Absolute directory. */
+  path: string;
+  /** Off entries stay in the list and are skipped when a terminal spawns. */
+  enabled: boolean;
+  /** Extension that added this entry, when one did. */
+  managedBy?: string;
+  /** Extension that switched this entry off to avoid a conflict. Only that
+   *  extension turns it back on. */
+  disabledBy?: string;
+};
+
 export type ShellCommandTransformer = (command: string, kind: ShellCommandKind) => string;
 
 // ---------------------------------------------------------------------------
@@ -498,7 +573,17 @@ export type MountedFolderTree = {
 // ---------------------------------------------------------------------------
 
 export type CodeEditorLanguage =
-  "sql" | "sql:mysql" | "sql:postgres" | "sql:sqlite" | "json" | "javascript" | "http" | "plain";
+  | "sql"
+  | "sql:mysql"
+  | "sql:postgres"
+  | "sql:sqlite"
+  | "json"
+  | "javascript"
+  | "http"
+  /** `key = value` with `;`/`#` comments and `[section]` headers: php.ini,
+   *  .env, .properties, .conf. */
+  | "ini"
+  | "plain";
 
 /**
  * One autocomplete suggestion. `type` selects the leading icon CodeMirror
@@ -593,9 +678,8 @@ export type ContributedPanel = {
   title: string;
   /** `"right"` is the slide-out slot next to the workspace (mutually
    *  exclusive with the AI sidebar). `"tab"` mounts the renderer as a full
-   *  workspace tab, opened via `ctx.tabs.openExtensionTab`. The other
-   *  surfaces are reserved. */
-  surface: "sidebar-bottom" | "statusbar-right" | "right" | "tab";
+   *  workspace tab, opened via `ctx.tabs.openExtensionTab`. */
+  surface: "right" | "tab";
   icon?: string;
   /** Open this panel once per session on launch. The user can override. */
   defaultOpen?: boolean;
@@ -718,6 +802,7 @@ export type KnownPermission =
   | "workspaces:manage"
   /** Rewrite every shell command the AI agent runs. Badged high. */
   | "shell:transform"
+  | "terminal:path"
   /** Retarget the agent's model / provider and toggle sub-agents. */
   | "ai:configure"
   /** Submit a prompt as if the user typed it. */
@@ -792,6 +877,17 @@ export type ExtensionContext = {
     createWorkspace(name: string): Promise<{ ok: boolean; wsId?: string; error?: string }>;
     /** Switch the active workspace by id. Requires `workspaces:manage`. */
     setActiveWorkspace(wsId: string): Promise<{ ok: boolean; error?: string }>;
+    /** Rename a workspace. The new name reaches you through
+     *  `terminals[].wsName`. Requires `workspaces:manage`. */
+    renameWorkspace(wsId: string, name: string): Promise<{ ok: boolean; error?: string }>;
+    /** Pin or unpin the tab a terminal belongs to. `key` is the id
+     *  `terminals[].ptyId` publishes (a daemon ptyId, or `ssh:<sessionId>`).
+     *  Requires `workspaces:manage`. */
+    setTabPinned(key: string, pinned: boolean): Promise<{ ok: boolean; error?: string }>;
+    /** Rename a terminal's tab, or pass `null` to drop back to the derived name.
+     *  `key` is as in `setTabPinned`; the result shows up as
+     *  `terminals[].customTitle`. Requires `workspaces:manage`. */
+    renameTab(key: string, title: string | null): Promise<{ ok: boolean; error?: string }>;
   };
 
   /** App settings, namespaced under `ext:<your-id>:`. Built-in settings are
@@ -901,9 +997,21 @@ export type ExtensionContext = {
       opts?: { size?: number; strokeWidth?: number; className?: string },
     ): HTMLElement;
     /** Mount a CodeMirror 6 editor that reuses the host's bundle, so line
-     *  numbers, gutter, selection and syntax highlight match the main editor
-     *  pane exactly. Ungated; auto-disposed. */
+     *  numbers, gutter, folding, selection and syntax highlight match the main
+     *  editor pane exactly. Find and replace is included and wears the app's
+     *  chrome: Mod+F opens it, Mod+G / Shift+Mod+G step, Escape closes.
+     *  Ungated; auto-disposed. */
     codeEditor(container: HTMLElement, opts: CodeEditorOptions): CodeEditorHandle;
+    /**
+     * Native folder picker. Resolves to the absolute path the user chose, or
+     * null when they cancelled.
+     *
+     * Ungated: it shows an OS dialog the user has to confirm and returns only
+     * what they picked. Use it anywhere you would otherwise ask someone to type
+     * an absolute path - a typed path is how a stray character ends up in a
+     * Windows root and every later write fails.
+     */
+    pickFolder(opts?: { title?: string; defaultPath?: string }): Promise<string | null>;
   };
 
   /** Bottom-right status-bar icons, keyed by `id`. Removed on deactivate. */
@@ -955,6 +1063,9 @@ export type ExtensionContext = {
       reuseKey?: string;
       state: ExtensionTabState | null;
       title?: string;
+      /** Same icon refs `contributes.panels[].icon` takes, including a `data:`
+       *  URL - which is how a pane can wear the favicon of the page it shows. */
+      icon?: string;
     }): void;
   };
 
@@ -984,10 +1095,46 @@ export type ExtensionContext = {
     closeForward(connectionId: string, remoteHost: string, remotePort: number): Promise<void>;
   };
 
+  /**
+   * The terminal's own "Additional PATH" list - the folders Settings prepends
+   * to every terminal's PATH. Every method requires `terminal:path`.
+   *
+   * For an extension that MANAGES runtimes: registering a folder is how `php`
+   * in a TEDI terminal becomes the php you installed rather than whatever was
+   * on the system PATH first. The alternative is asking the user to paste a
+   * path into Settings, which they have to be told about and can get wrong.
+   */
+  terminal: {
+    /** The list as Settings shows it, in PATH order (first wins). */
+    listPaths(): TerminalPathEntry[];
+    /**
+     * Put `dir` FIRST on the terminal PATH, and switch off any other entry that
+     * provides one of `provides` (`["php", "node", "composer"]`, say).
+     *
+     * Conflicts are PROBED, not guessed: an entry is only disabled when the
+     * same check Settings runs actually finds one of those tools in it, and a
+     * folder that cannot be probed is left alone. Disabled, never deleted - the
+     * user's own entries stay in the list, switched off, and
+     * `unregisterPath` puts back exactly the ones this call changed.
+     *
+     * Idempotent: calling it again re-asserts the position and returns.
+     */
+    registerPath(
+      dir: string,
+      opts?: { provides?: string[] },
+    ): Promise<{ added: boolean; disabled: string[] }>;
+    /**
+     * Remove this extension's entry and re-enable only what registering it
+     * switched off. An entry the USER disabled stays disabled. Omit `dir` to
+     * drop every entry this extension owns.
+     */
+    unregisterPath(dir?: string): Promise<{ removed: boolean; restored: string[] }>;
+  };
+
   shell: {
-    /** Rewrite commands before `bash_run`, `bash_background`,
-     *  `run_in_terminal` and `suggest_command` execute. Transformers compose
-     *  in insertion order. Requires `shell:transform`. */
+    /** Rewrite commands before `bash_run`, `bash_background`, the `sh` MCP tool
+     *  and `schedule_command` execute. Transformers compose in insertion order.
+     *  Requires `shell:transform`. */
     registerCommandTransformer(transformer: ShellCommandTransformer): Disposer;
   };
 

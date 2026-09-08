@@ -6,6 +6,7 @@
 // no network.
 
 import { ctx } from "./runtime.js";
+import { byDay } from "./activity.js";
 
 export async function readCodexUsage(home) {
   const root = `${home}/.codex/sessions`;
@@ -20,6 +21,9 @@ export async function readCodexUsage(home) {
   // Rollout filenames embed an ISO timestamp, so a descending string sort puts
   // the newest first without needing per-file mtime.
   paths.sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
+  // A session's date is in its filename, so the activity heatmap comes out of
+  // the glob that already ran: no second walk, no file reads.
+  const days = sessionDays(paths);
 
   for (const path of paths.slice(0, 6)) {
     const snap = await lastRateLimits(path);
@@ -37,10 +41,22 @@ export async function readCodexUsage(home) {
         // written, so there is a number on disk but it means nothing now.
         expired: hadPct && !primary && !secondary,
         capturedAt,
+        days,
       };
     }
   }
-  return { ok: false, reason: "no-rate-data" };
+  // No live window, but the sessions on disk still say when Codex was used.
+  return { ok: false, reason: "no-rate-data", days };
+}
+
+/** Sessions per local day, from the rollout filenames. */
+function sessionDays(paths) {
+  const stamps = [];
+  for (const p of paths) {
+    const t = tsFromName(p);
+    if (t != null) stamps.push(t);
+  }
+  return stamps.length ? byDay(stamps) : null;
 }
 
 async function lastRateLimits(path) {

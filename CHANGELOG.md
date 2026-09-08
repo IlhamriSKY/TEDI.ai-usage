@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.12
+
+### Added
+
+- **A year of your activity in the hover tooltip**, above the usage bars: a cell per day, a column per week, shaded by how busy that day was, which is the grid GitHub draws for contributions. It answers a different question than the meters do. A percentage says how much of this window is spent; the grid says when you actually work, where the gaps are, and whether last week looked like the twenty before it.
+  - **Claude** counts prompts, from `~/.claude/history.jsonl`, the log Claude Code appends a line to for every prompt you send in any project. The usage endpoint cannot answer this at all: it reports the current window, not a history. (`stats-cache.json` holds this exact shape under `dailyActivity`, but Claude Code only recomputes it when you open the usage view, so it is usually months out of date.)
+  - **Codex** counts sessions, out of the rollout filenames the meter already globs. No extra file read: the date is in the name.
+  - A day is shaded against the rest of your year, not against your busiest day. One 168-prompt afternoon would otherwise flatten every ordinary day onto the faintest step.
+  - **The grid is labelled**, because a field of 371 squares is a pattern, not a reading. Month names sit above the week each month opens in, and pointing at any cell replaces the summary line with that day: "Mon, 7 Sep - 130 prompts". Dates use your own locale. A day that has not happened yet is blank and says nothing.
+  - The grid is local history, so it does not need the live numbers: a rate-limited Claude meter or a Codex window that has since reset still shows the year, with the reason as its only row.
+
+### Changed
+
+- The activity read is deliberately not on the poll. `history.jsonl` is 1.5 MB after six months of daily use, and the chart only changes once a day, so it is read at startup and again when you click a meter, not every five minutes. Past 10 MB the host stops reading the file and the chart quietly goes away rather than the meter breaking.
+- `engines.tedi` raised to `>=0.4.45`, the release that added `StatusItemDetailChart.mode: "cells"`. On an older host the grid would be drawn as a 48-column bar chart of 371 daily values, which is not a wrong picture so much as a meaningless one.
+
 ## 0.1.11
 
 ### Changed

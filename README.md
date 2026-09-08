@@ -6,7 +6,8 @@ Shows your [Claude Code](https://claude.com/claude-code) and
 percentage, and a progress bar that turns amber then red as you approach a
 limit. Hover either meter for the full breakdown, the 5-hour rolling window and
 the weekly (or monthly) window, each drawn as a real progress bar with a reset
-countdown.
+countdown, over a year of your daily activity: a cell per day, a column per
+week, shaded by how busy the day was, the way GitHub draws contributions.
 
 <p align="center">
   <img src="logo.png" alt="AI Usage Meter" width="128" />
@@ -34,6 +35,7 @@ and the only network call is to Claude's own usage endpoint.
 | --- | --- |
 | **Claude Code** | Reads the OAuth token from `~/.claude/.credentials.json` (or the macOS login Keychain), then GETs `https://api.anthropic.com/api/oauth/usage`, the same numbers `/usage` shows (`five_hour` + `seven_day` utilization and reset times). The request goes through `curl` because the app webview blocks a direct cross-origin `fetch`. |
 | **Codex** | Reads the newest `~/.codex/sessions/**/rollout-*.jsonl` and pulls the last `token_count` event's `rate_limits` (the `primary` / `secondary` windows). Codex only writes these once it makes an API call, so the meter shows the last known snapshot with an "as of ..." note. Window sizes are labelled by their reported duration (5-hour / weekly / monthly). |
+| **Activity grid** | Claude counts prompts, from `~/.claude/history.jsonl` (one line per prompt you send, in any project). Codex counts sessions, from the dates in the rollout filenames the meter already globs. Both are local, and a day is shaded against the rest of your year rather than against your busiest day, so one enormous afternoon does not flatten everything else. |
 
 The meter refreshes every 5 minutes. Anthropic's usage endpoint rate-limits
 aggressive polling (a known Claude Code issue), so on a 429 the extension backs
@@ -47,9 +49,16 @@ Bottom-right meters, and the hover tooltip (each window drawn as its own bar):
 claude 8% ██░░░░░░░░    openai 6% █░░░░░░░░░
 
 Claude Code (Max)
+Sep   Oct   Nov   Dec   Jan   Feb   Mar   Apr   May   Jun   Jul   Aug
+░░▓░░█▓░░░▒░░░▓█▒░░░░▒▓░█░░░▒░░▓▒░░█░░▒░░░▓░█▒░░▓█░░▒
+last 12 months            5,517 prompts, 127 active days
 5-hour   ██░░░░░░░░   8%   resets in 3h 9m
 Weekly   ████░░░░░░  41%   resets in 3h 39m
 ```
+
+(one row per weekday, seven of them; the drawing here is one row of a 53-week
+grid.) Point at any cell and the summary line becomes that day:
+`Mon, 7 Sep - 130 prompts`.
 
 ## Settings
 
@@ -64,10 +73,10 @@ Two switches on this extension's Settings card toggle each meter independently:
 | --- | --- |
 | `statusbar:write` | Draw the two meters. |
 | `settings:read` | Read the two show/hide switches. |
-| `invoke:fs_read_file` | Read `~/.claude/.credentials.json` and the Codex rollout files. |
-| `invoke:fs_glob` | Find the newest Codex session file. |
+| `settings:write` | Fill in the read-only account rows on the Settings card. |
+| `invoke:fs_read_file` | Read `~/.claude/.credentials.json`, `~/.claude/history.jsonl` and the Codex rollout files. |
+| `invoke:fs_glob` | Find the Codex session files. |
 | `invoke:shell_run_command` | Resolve your home directory and run `curl` for Claude's usage endpoint. |
-| `ui:toast` | Surface the occasional error. |
 
 `invoke:shell_run_command` and `invoke:fs_read_file` are flagged high-risk in
 the install dialog because they can, in general, run commands and read files.
@@ -79,6 +88,9 @@ This extension uses them only for the purposes above; the source is in `src/`.
 - Your Claude OAuth token never leaves your machine except as the `Authorization`
   header on the request to `api.anthropic.com` (Anthropic's own endpoint).
 - Codex data is read from local files and never sent anywhere.
+- The activity grid is counted on your machine and stays there. Only each
+  history line's timestamp is kept; the prompt text is discarded as the line is
+  parsed, and never stored or sent.
 
 ## Development
 
