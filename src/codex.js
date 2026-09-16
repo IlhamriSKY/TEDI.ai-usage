@@ -1,52 +1,115 @@
-// Codex (ChatGPT) usage. Reads the newest Codex rollout session and returns
-// its last known rate-limit snapshot. Codex writes `rate_limits.primary` (the
-// ~5-hour window) and `.secondary` (the weekly window) into `token_count`
-// events, but leaves them null until it makes an API call - so we scan the
-// newest few sessions for the last non-null snapshot. All local file reads,
-// no network.
+// Codex (ChatGPT) plan usage, from whichever of the two local records is
+// fresher: the file TEDI's own ai-native writes from its response headers, or
+// the Codex CLI's rollout snapshots. The CLI leaves `rate_limits` null until it
+// makes an API call, so its side scans the newest few sessions for the last
+// non-null one. All local file reads, no network.
 
 import { ctx } from "./runtime.js";
 import { byDay } from "./activity.js";
 
+// Two possible sources, same account, same backend:
+//   1. `~/.tedi/chatgpt-usage.json` - written by TEDI's own ai-native from the
+//      `x-codex-*` headers every ChatGPT-account response carries.
+//   2. the Codex CLI's `~/.codex/sessions/**\/rollout-*.jsonl` snapshots.
+// Whichever was captured more recently wins. Before (1) existed, a user who
+// works in ai-native rather than the CLI saw the CLI's last snapshot forever:
+// measured here as "Monthly 0%, as of 19d 22h ago" while the account was at
+// 42%, and no amount of clicking refresh could move it, because the file it
+// re-read was three weeks dead.
 export async function readCodexUsage(home) {
-  const root = `${home}/.codex/sessions`;
-  let paths = [];
-  try {
-    const resp = await ctx.invoke("fs_glob", { pattern: "**/rollout-*.jsonl", root, maxResults: 800 });
-    paths = (resp?.hits || []).map((h) => h.path).filter(Boolean);
-  } catch {
-    return { ok: false, reason: "no-sessions" };
-  }
-  if (!paths.length) return { ok: false, reason: "no-sessions" };
-  // Rollout filenames embed an ISO timestamp, so a descending string sort puts
-  // the newest first without needing per-file mtime.
-  paths.sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
+  const paths = await rolloutPaths(home);
   // A session's date is in its filename, so the activity heatmap comes out of
   // the glob that already ran: no second walk, no file reads.
-  const days = sessionDays(paths);
+  const days = paths.length ? sessionDays(paths) : null;
 
+  const [live, cli] = await Promise.all([readAppUsage(home), scanRollouts(paths)]);
+  // Strictly newer wins; ties go to the app, which is the one that keeps
+  // updating.
+  const best =
+    live && cli ? (cli.capturedAt > live.capturedAt ? cli : live) : (live ?? cli);
+
+  if (!best) return { ok: false, reason: paths.length ? "no-rate-data" : "no-sessions", days };
+  return { ...best, days };
+}
+
+/** Usage TEDI's own ai-native recorded from the response headers. */
+async function readAppUsage(home) {
+  let data;
+  try {
+    const res = await ctx.invoke("fs_read_file", { path: `${home}/.tedi/chatgpt-usage.json` });
+    if (res?.kind !== "text" || !res.content) return null;
+    data = JSON.parse(res.content);
+  } catch {
+    return null; // not written yet, or not valid JSON
+  }
+  const capturedAt = num(data?.capturedAt);
+  if (capturedAt == null) return null;
+  // Reuse the rollout window parser so both sources age out identically: a
+  // window whose reset has passed is dead here too, however it was captured.
+  const primary = win(camelWindow(data.primary), capturedAt);
+  const secondary = win(camelWindow(data.secondary), capturedAt);
+  const hadPct = [data.primary, data.secondary].some((w) => w && w.usedPercent != null);
+  if (!hadPct) return null;
+  return {
+    ok: true,
+    plan: data.planType || data.activeLimit || null,
+    primary,
+    secondary,
+    expired: !primary && !secondary,
+    capturedAt,
+    source: "ai-native",
+  };
+}
+
+/** The app writes camelCase; `win()` speaks the CLI's snake_case. */
+function camelWindow(w) {
+  if (!w || typeof w !== "object") return null;
+  return {
+    used_percent: w.usedPercent,
+    window_minutes: w.windowMinutes,
+    resets_at: w.resetsAt,
+  };
+}
+
+async function rolloutPaths(home) {
+  try {
+    const resp = await ctx.invoke("fs_glob", {
+      pattern: "**/rollout-*.jsonl",
+      root: `${home}/.codex/sessions`,
+      maxResults: 800,
+    });
+    const paths = (resp?.hits || []).map((h) => h.path).filter(Boolean);
+    // Rollout filenames embed an ISO timestamp, so a descending string sort
+    // puts the newest first without needing per-file mtime.
+    paths.sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
+    return paths;
+  } catch {
+    return [];
+  }
+}
+
+/** Newest non-null rate-limit snapshot the Codex CLI left behind. */
+async function scanRollouts(paths) {
   for (const path of paths.slice(0, 6)) {
     const snap = await lastRateLimits(path);
-    if (snap) {
-      const capturedAt = snap.ts ?? tsFromName(path);
-      const primary = win(snap.rl.primary, capturedAt);
-      const secondary = win(snap.rl.secondary, capturedAt);
-      const hadPct = [snap.rl.primary, snap.rl.secondary].some((w) => w && w.used_percent != null);
-      return {
-        ok: true,
-        plan: snap.rl.plan_type || snap.rl.limit_id || null,
-        primary,
-        secondary,
-        // Every window the snapshot carried has rolled over since it was
-        // written, so there is a number on disk but it means nothing now.
-        expired: hadPct && !primary && !secondary,
-        capturedAt,
-        days,
-      };
-    }
+    if (!snap) continue;
+    const capturedAt = snap.ts ?? tsFromName(path);
+    const primary = win(snap.rl.primary, capturedAt);
+    const secondary = win(snap.rl.secondary, capturedAt);
+    const hadPct = [snap.rl.primary, snap.rl.secondary].some((w) => w && w.used_percent != null);
+    return {
+      ok: true,
+      plan: snap.rl.plan_type || snap.rl.limit_id || null,
+      primary,
+      secondary,
+      // Every window the snapshot carried has rolled over since it was
+      // written, so there is a number on disk but it means nothing now.
+      expired: hadPct && !primary && !secondary,
+      capturedAt: capturedAt ?? 0,
+      source: "codex-cli",
+    };
   }
-  // No live window, but the sessions on disk still say when Codex was used.
-  return { ok: false, reason: "no-rate-data", days };
+  return null;
 }
 
 /** Sessions per local day, from the rollout filenames. */

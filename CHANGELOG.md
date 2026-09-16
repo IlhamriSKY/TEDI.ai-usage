@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.13
+
+### Fixed
+
+- **The Codex meter shows your real usage instead of sitting at 0%.** Its only source was the Codex CLI's own session logs under `~/.codex/sessions`, and TEDI's built-in agent writes none of those, so if you work in TEDI rather than the CLI the meter reported whatever the CLI last saw and never moved again. Found on a machine where it read "Monthly 0%, as of 19d 22h ago" from a file written three weeks earlier, while the account was really at 42%. Clicking the meter to refresh re-read that same dead file, which is why refreshing appeared to do nothing. TEDI v0.4.59 now records its own plan usage to `~/.tedi/chatgpt-usage.json`, taken from headers the backend already returns on every request, and the meter reads whichever of the two records was captured more recently. A Codex CLI user is unaffected, and someone with no `~/.codex` at all now gets a number for the first time.
+
+### Changed
+
+- The meter no longer needs a manual refresh to be current: the file the app writes changes as you work, so the existing five-minute poll is enough. The click is still there and still bypasses the Claude rate-limit back-off.
+
 ## 0.1.12
 
 ### Added
