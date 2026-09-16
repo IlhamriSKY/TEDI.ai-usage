@@ -13,6 +13,7 @@ import { readCodexUsage } from "./codex.js";
 const PATH = "2026/07/23/rollout-2026-07-23T07-25-43-abc.jsonl";
 const CAPTURED = "2026-07-23T00:34:27.050Z";
 const APP_FILE = "/home/x/.tedi/chatgpt-usage.json";
+const ACTIVITY_FILE = "/home/x/.tedi/chatgpt-activity.json";
 
 // One `token_count` event, exactly the shape Codex writes (resets_at = epoch
 // SECONDS, secondary null, 30-day primary on the "go" plan).
@@ -42,14 +43,18 @@ const appFile = (capturedAt, usedPercent, resetsAtMs) =>
     credits: { hasCredits: false, unlimited: false, balance: null },
   });
 
-/** @param {{rollouts?: boolean, app?: string|null, resetsAtSec?: number}} o */
-function mock({ rollouts = true, app = null, resetsAtSec }) {
+/** @param {{rollouts?: boolean, app?: string|null, activity?: string|null, resetsAtSec?: number}} o */
+function mock({ rollouts = true, app = null, activity = null, resetsAtSec }) {
   setCtx({
     invoke: async (cmd, args) => {
       if (cmd === "fs_glob") return { hits: rollouts ? [{ path: PATH }] : [] };
       if (args?.path === APP_FILE) {
         if (!app) throw new Error("ENOENT");
         return { kind: "text", content: app };
+      }
+      if (args?.path === ACTIVITY_FILE) {
+        if (!activity) throw new Error("ENOENT");
+        return { kind: "text", content: activity };
       }
       return { kind: "text", content: line(resetsAtSec) };
     },
@@ -94,6 +99,19 @@ u = await readCodexUsage("/home/x");
 assert.equal(u.ok, true, "a user who never ran the Codex CLI must still get a number");
 assert.equal(u.primary.pct, 42);
 assert.equal(u.days, null, "no rollouts means no activity grid, not a crash");
+
+// --- ai-native activity is visible even without Codex CLI rollouts ---
+mock({
+  rollouts: false,
+  app: appFile(now - 60_000, 42, now + 7_200_000),
+  activity: JSON.stringify({ events: [now - 86_400_000, now] }),
+});
+u = await readCodexUsage("/home/x");
+assert.equal(u.ok, true);
+assert.equal(
+  [...u.days.values()].reduce((sum, count) => sum + count, 0),
+  2,
+);
 
 // --- an app file whose window already rolled over is dead too ---
 mock({ rollouts: false, app: appFile(now - 60_000, 42, now - 1000) });

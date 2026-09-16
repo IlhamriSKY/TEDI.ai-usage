@@ -1,8 +1,8 @@
 // Codex (ChatGPT) plan usage, from whichever of the two local records is
 // fresher: the file TEDI's own ai-native writes from its response headers, or
-// the Codex CLI's rollout snapshots. The CLI leaves `rate_limits` null until it
-// makes an API call, so its side scans the newest few sessions for the last
-// non-null one. All local file reads, no network.
+// the Codex CLI's rollout snapshots. Activity comes from both sources too:
+// TEDI records completed ai-native turns because they do not create Codex CLI
+// rollout files. All local file reads, no network.
 
 import { ctx } from "./runtime.js";
 import { byDay } from "./activity.js";
@@ -18,15 +18,19 @@ import { byDay } from "./activity.js";
 // re-read was three weeks dead.
 export async function readCodexUsage(home) {
   const paths = await rolloutPaths(home);
-  // A session's date is in its filename, so the activity heatmap comes out of
-  // the glob that already ran: no second walk, no file reads.
-  const days = paths.length ? sessionDays(paths) : null;
-
-  const [live, cli] = await Promise.all([readAppUsage(home), scanRollouts(paths)]);
+  // A session's date is in its filename, so the CLI side of the heatmap comes
+  // out of the glob that already ran. TEDI's ai-native has a small companion
+  // activity file because it does not create Codex CLI rollout files.
+  const sessionActivity = paths.length ? sessionDays(paths) : null;
+  const [live, cli, appActivity] = await Promise.all([
+    readAppUsage(home),
+    scanRollouts(paths),
+    readAppActivity(home),
+  ]);
+  const days = mergeDays(sessionActivity, appActivity);
   // Strictly newer wins; ties go to the app, which is the one that keeps
   // updating.
-  const best =
-    live && cli ? (cli.capturedAt > live.capturedAt ? cli : live) : (live ?? cli);
+  const best = live && cli ? (cli.capturedAt > live.capturedAt ? cli : live) : (live ?? cli);
 
   if (!best) return { ok: false, reason: paths.length ? "no-rate-data" : "no-sessions", days };
   return { ...best, days };
@@ -59,6 +63,29 @@ async function readAppUsage(home) {
     capturedAt,
     source: "ai-native",
   };
+}
+
+/** Read completed turns recorded by TEDI's ai-native for the activity grid. */
+async function readAppActivity(home) {
+  try {
+    const res = await ctx.invoke("fs_read_file", { path: `${home}/.tedi/chatgpt-activity.json` });
+    if (res?.kind !== "text" || !res.content) return null;
+    const data = JSON.parse(res.content);
+    const events = Array.isArray(data?.events) ? data.events : [];
+    const days = byDay(events);
+    return days.size ? days : null;
+  } catch {
+    return null;
+  }
+}
+
+function mergeDays(...sources) {
+  const merged = new Map();
+  for (const source of sources) {
+    if (!source) continue;
+    for (const [day, count] of source) merged.set(day, (merged.get(day) ?? 0) + count);
+  }
+  return merged.size ? merged : null;
 }
 
 /** The app writes camelCase; `win()` speaks the CLI's snake_case. */

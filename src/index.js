@@ -8,7 +8,8 @@
 // Data sources:
 //   Claude -> ~/.claude/.credentials.json (or macOS Keychain) -> oauth/usage
 //   Codex  -> newest ~/.codex/sessions/**/rollout-*.jsonl rate_limits snapshot
-//   Activity -> ~/.claude/history.jsonl + the Codex rollout filenames
+//   Activity -> ~/.claude/history.jsonl + Codex rollout filenames +
+//                ~/.tedi/chatgpt-activity.json for TEDI ai-native turns
 //   Accounts -> ~/.claude.json + ~/.codex/auth.json (id_token)
 // Runs on a 5-minute poll; nothing is written, only read.
 

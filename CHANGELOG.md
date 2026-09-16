@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.14
+
+### Added
+
+- **Work in TEDI's built-in agent shows up in the Codex activity grid.** The grid counted Codex CLI sessions from their rollout filenames, and TEDI's built-in agent writes no rollouts, so someone signed in with a ChatGPT account who works inside TEDI saw an empty year however much they used it. TEDI v0.4.61 records the time of each finished turn in `~/.tedi/chatgpt-activity.json`, and the grid now adds those turns to the CLI sessions day by day. The file holds timestamps only. On an older TEDI, or with no such file, the grid is exactly what it was.
+
 ## 0.1.13
 
 ### Fixed
