@@ -29,7 +29,18 @@ export async function readClaudeUsage(home, platform) {
     plan: token.plan,
     fiveHour: pct(fh.utilization) != null ? { pct: pct(fh.utilization), resetsAt: fh.resets_at || null } : null,
     weekly: pct(wk.utilization) != null ? { pct: pct(wk.utilization), resetsAt: wk.resets_at || null } : null,
+    models: modelLimits(json.limits),
   };
+}
+
+// Per-model weekly caps (e.g. Fable), from the `limits` array. The top-level
+// fields carry them only under codenames (`nimbus_quill`), while `limits` names
+// the model, so a new scoped model shows up without a code change.
+function modelLimits(limits) {
+  if (!Array.isArray(limits)) return [];
+  return limits
+    .filter((l) => l?.kind === "weekly_scoped" && l.scope?.model?.display_name && pct(l.percent) != null)
+    .map((l) => ({ name: l.scope.model.display_name, pct: l.percent, resetsAt: l.resets_at || null }));
 }
 
 async function readToken(home, platform) {

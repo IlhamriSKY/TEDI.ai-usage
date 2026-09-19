@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.15
+
+### Added
+
+- **A Fable row under the Claude meter.** Claude plans now carry a separate weekly limit for Fable, and the usage endpoint reports it in a `limits` list named by model. The tooltip shows it as its own row with a bar and a reset countdown, next to the 5-hour and weekly windows. It does not change the meter's colour, because a Fable cap stops only Fable. Any other per-model weekly limit the endpoint adds later shows up the same way.
+
+### Changed
+
+- **The activity grid ends today.** The rest of the current week used to be drawn as empty boxes, which read as days with no activity rather than days that have not happened yet. Those days now get no box, so the last column is as tall as the week is old.
+
 ## 0.1.14
 
 ### Added

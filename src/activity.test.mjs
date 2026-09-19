@@ -6,9 +6,10 @@ import { byDay, dayKey, heatmap } from "./activity.js";
 
 // Tuesday 8 September 2026, 10:00 local.
 const NOW = new Date(2026, 8, 8, 10, 0, 0).getTime();
-const CELLS = 53 * 7;
+// 52 whole weeks, then this week up to today (a Tuesday): Sun, Mon, Tue.
+const CELLS = 52 * 7 + 3;
 /** Index of the cell for a weekday in the last (current) week. Sunday = 0. */
-const thisWeek = (weekday) => CELLS - 7 + weekday;
+const thisWeek = (weekday) => 52 * 7 + weekday;
 
 // Local day, not UTC: 23:00 belongs to the date on the user's clock.
 assert.equal(dayKey(new Date(2026, 8, 8, 23, 30).getTime()), "2026-09-08");
@@ -23,10 +24,10 @@ assert.equal(grid.values.length, CELLS);
 assert.equal(grid.rows, 7);
 assert.equal(grid.mode, "cells");
 
-// Today is a Tuesday, so it is the third cell of the last column, and the rest
-// of that week has not happened yet.
+// Today is a Tuesday, so it is the third and LAST cell: the rest of the week
+// has not happened, and a day that has not happened gets no box at all.
 assert.ok(grid.values[thisWeek(2)] > 0, "today is lit");
-assert.equal(grid.values[thisWeek(3)], 0, "tomorrow is empty");
+assert.equal(grid.values.at(-1), grid.values[thisWeek(2)], "today is the last cell");
 assert.equal(grid.values[thisWeek(1)], 0, "a day with nothing stays empty");
 
 // The oldest cell is the Sunday 52 weeks back, and it is inside the grid.
@@ -65,7 +66,6 @@ assert.equal(grid.columnLabels.length, 53);
 assert.match(grid.cellLabels[thisWeek(2)], /8.*Sep|Sep.*8/);
 assert.match(grid.cellLabels[thisWeek(2)], /5 prompts/);
 assert.match(grid.cellLabels[thisWeek(1)], /no prompts/);
-assert.equal(grid.cellLabels[thisWeek(3)], null, "a future day has no label");
 assert.match(
   heatmap(new Map([["2026-09-07", 1]]), "prompts", NOW).cellLabels[thisWeek(1)],
   /1 prompt$/,

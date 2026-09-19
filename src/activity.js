@@ -60,12 +60,13 @@ export function heatmap(days, unit, now = Date.now()) {
   let lastLabelCol = -9;
   for (let i = 0; i < WEEKS * 7; i++) {
     const key = dayKey(cur.getTime());
-    // The rest of the current week has not happened yet. ISO dates compare as
-    // strings, so this is the whole check.
-    const future = key > today;
-    const n = future ? 0 : (days.get(key) ?? 0);
+    // The grid ends today: the rest of this week has not happened, so it gets
+    // no cell at all and the last column is simply shorter. ISO dates compare
+    // as strings, so this is the whole check.
+    if (key > today) break;
+    const n = days.get(key) ?? 0;
     counts.push(n);
-    cellLabels.push(future ? null : `${dateLabel(cur)} - ${countLabel(n, unit)}`);
+    cellLabels.push(`${dateLabel(cur)} - ${countLabel(n, unit)}`);
     if (i % 7 === 0) {
       // Label the week that opens a month, but never two labels within three
       // columns: they are absolutely positioned and would overlap.

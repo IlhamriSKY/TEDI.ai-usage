@@ -103,9 +103,12 @@ function claudeView(u, chart) {
     const note = reasonText(u.reason, "claude");
     return withChart({ tooltip: `${title}\n${note}` }, title, chart, note);
   }
+  // A per-model cap (Fable) only blocks that model, so it gets its own row but
+  // stays out of the headline tone, which is about being able to work at all.
   const windows = [
     ["5-hour", u.fiveHour],
     ["Weekly", u.weekly],
+    ...(u.models ?? []).map((m) => [m.name, m]),
   ];
   const view = markStale(
     { tooltip: textTooltip(title, windows), detail: detailTooltip(title, windows) },
