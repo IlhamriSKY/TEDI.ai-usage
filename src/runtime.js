@@ -16,6 +16,8 @@ export const state = {
   home: null,
   /** Poll interval handle. */
   timer: null,
+  /** Pending startup retry (index.js retryStartup), while the first read failed. */
+  retryTimer: null,
   /** Per-meter visibility, driven by the contributed settings. */
   showClaude: true,
   showCodex: true,
@@ -45,6 +47,8 @@ export function clearTimer() {
     clearInterval(state.timer);
     state.timer = null;
   }
+  clearTimeout(state.retryTimer);
+  state.retryTimer = null;
 }
 
 // `echo $HOME` prints the home dir in BOTH POSIX sh (`-lc`) and PowerShell

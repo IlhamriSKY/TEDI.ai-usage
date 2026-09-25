@@ -97,7 +97,29 @@ export async function activate(context) {
 
   await refresh();
   // Guard against a deactivate() that raced the first `await refresh()`.
-  if (state.active) state.timer = setInterval(refresh, POLL_MS);
+  if (!state.active) return;
+  state.timer = setInterval(refresh, POLL_MS);
+  retryStartup(0);
+}
+
+// TEDI often launches at login, before the network is up, and the Claude
+// endpoint can answer the very first call with a 429. Either way the meter would
+// sit on last session's numbers until the next 5-minute poll (or the 15-minute
+// back-off), so after a failed first read retry on a short ladder instead.
+const STARTUP_RETRY_MS = [10_000, 30_000, 60_000, 120_000];
+
+function retryStartup(i) {
+  const c = state.lastClaude;
+  const fresh = c?.ok && !c.stale;
+  if (!state.active || fresh || c?.reason === "not-signed-in" || i >= STARTUP_RETRY_MS.length) return;
+  state.retryTimer = setTimeout(async () => {
+    state.retryTimer = null;
+    // The user never saw a fresh number this session, so a startup 429 does not
+    // get to park the meter for 15 minutes; a still-throttled answer re-arms it.
+    state.claudeCooldownUntil = 0;
+    await refresh();
+    retryStartup(i + 1);
+  }, STARTUP_RETRY_MS[i]);
 }
 
 /**
