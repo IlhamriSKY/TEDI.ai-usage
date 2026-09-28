@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.17
+
+### Fixed
+
+- **Clicking the Codex meter now checks your current account usage.** The meter used to reread TEDI's last response headers or a Codex CLI rollout file, so it could not move until another agent turn happened. It now asks Codex's current-account usage endpoint with the existing local ChatGPT login when it polls or you click the meter. The direct answer wins over local snapshots; if it is unavailable, the existing TEDI-header and CLI-log sources remain the fallback. A 429 pauses direct checks for five minutes rather than repeatedly retrying.
+
 ## 0.1.15
 
 ### Added

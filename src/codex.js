@@ -1,11 +1,13 @@
-// Codex (ChatGPT) plan usage, from whichever of the two local records is
-// fresher: the file TEDI's own ai-native writes from its response headers, or
-// the Codex CLI's rollout snapshots. Activity comes from both sources too:
-// TEDI records completed ai-native turns because they do not create Codex CLI
-// rollout files. All local file reads, no network.
+// Codex (ChatGPT) plan usage. The direct account check is the freshest source;
+// if it is unavailable, fall back to TEDI's response headers and Codex CLI
+// snapshots. Activity comes from both local sources too.
 
 import { ctx } from "./runtime.js";
 import { byDay } from "./activity.js";
+
+const USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
+const RATE_LIMIT_COOLDOWN_MS = 5 * 60_000;
+let directCooldownUntil = 0;
 
 // Two possible sources, same account, same backend:
 //   1. `~/.tedi/chatgpt-usage.json` - written by TEDI's own ai-native from the
@@ -16,24 +18,104 @@ import { byDay } from "./activity.js";
 // measured here as "Monthly 0%, as of 19d 22h ago" while the account was at
 // 42%, and no amount of clicking refresh could move it, because the file it
 // re-read was three weeks dead.
-export async function readCodexUsage(home) {
+export async function readCodexUsage(home, platform = ctx?.os?.platform ?? "unknown", manual = false) {
   const paths = await rolloutPaths(home);
   // A session's date is in its filename, so the CLI side of the heatmap comes
   // out of the glob that already ran. TEDI's ai-native has a small companion
   // activity file because it does not create Codex CLI rollout files.
   const sessionActivity = paths.length ? sessionDays(paths) : null;
-  const [live, cli, appActivity] = await Promise.all([
+  const [direct, live, cli, appActivity] = await Promise.all([
+    readDirectUsage(home, platform, manual),
     readAppUsage(home),
     scanRollouts(paths),
     readAppActivity(home),
   ]);
   const days = mergeDays(sessionActivity, appActivity);
+  if (direct) return { ...direct, days };
   // Strictly newer wins; ties go to the app, which is the one that keeps
   // updating.
   const best = live && cli ? (cli.capturedAt > live.capturedAt ? cli : live) : (live ?? cli);
 
   if (!best) return { ok: false, reason: paths.length ? "no-rate-data" : "no-sessions", days };
   return { ...best, days };
+}
+
+/** A user-visible refresh can query the same current-account endpoint Codex uses. */
+async function readDirectUsage(home, platform, manual) {
+  if (!manual && Date.now() < directCooldownUntil) return null;
+  let auth;
+  try {
+    const res = await ctx.invoke("fs_read_file", { path: `${home}/.codex/auth.json` });
+    if (res?.kind !== "text" || !res.content) return null;
+    auth = JSON.parse(res.content);
+  } catch {
+    return null;
+  }
+  if (auth?.auth_mode !== "chatgpt") return null;
+  const token = auth.tokens?.access_token;
+  if (!token) return null;
+
+  const accountId = auth.tokens?.account_id || auth.account_id || "";
+  const curl = platform === "windows" ? "curl.exe" : "curl";
+  const accountHeader = accountId ? ` -H 'ChatGPT-Account-Id: ${accountId}'` : "";
+  try {
+    const out = await ctx.invoke("shell_run_command", {
+      command:
+        `${curl} -s -w '\nHTTPSTATUS:%{http_code}' --max-time 10 ` +
+        `-H 'Authorization: Bearer ${token}' -H 'User-Agent: codex-cli'${accountHeader} '${USAGE_URL}'`,
+      cwd: null,
+      timeoutSecs: 15,
+    });
+    const { status, json } = parseHttp(String(out?.stdout ?? ""));
+    if (status === 429) {
+      directCooldownUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;
+      return null;
+    }
+    return directUsage(json);
+  } catch {
+    return null;
+  }
+}
+
+function parseHttp(raw) {
+  const match = raw.match(/\r?\nHTTPSTATUS:(\d+)\s*$/);
+  const status = match ? Number(match[1]) : 0;
+  if (match) raw = raw.slice(0, match.index);
+  try {
+    return { status, json: raw.trim() ? JSON.parse(raw) : null };
+  } catch {
+    return { status, json: null };
+  }
+}
+
+function directUsage(json) {
+  const limits = json?.rate_limit;
+  if (!limits || typeof limits !== "object") return null;
+  const capturedAt = Date.now();
+  const primary = directWindow(limits.primary_window, capturedAt);
+  const secondary = directWindow(limits.secondary_window, capturedAt);
+  if (!primary && !secondary) return null;
+  return {
+    ok: true,
+    plan: limits.plan_type || limits.limit_id || null,
+    primary,
+    secondary,
+    expired: false,
+    capturedAt,
+    source: "chatgpt-account",
+  };
+}
+
+function directWindow(w, capturedAt) {
+  if (!w || typeof w !== "object") return null;
+  return win(
+    {
+      used_percent: w.used_percent,
+      window_minutes: num(w.limit_window_seconds) != null ? w.limit_window_seconds / 60 : null,
+      resets_at: w.reset_at,
+    },
+    capturedAt,
+  );
 }
 
 /** Usage TEDI's own ai-native recorded from the response headers. */

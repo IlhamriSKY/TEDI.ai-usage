@@ -165,7 +165,7 @@ async function refresh(manual) {
     !manual && Date.now() < state.claudeCooldownUntil
       ? Promise.resolve(null)
       : readClaudeUsage(home, platform);
-  const [claude, codex] = await Promise.allSettled([claudeP, readCodexUsage(home)]);
+  const [claude, codex] = await Promise.allSettled([claudeP, readCodexUsage(home, platform, manual)]);
   if (!state.active) return;
 
   const claudeVal = claude.status === "fulfilled" ? claude.value : null;

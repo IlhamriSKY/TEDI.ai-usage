@@ -43,11 +43,19 @@ const appFile = (capturedAt, usedPercent, resetsAtMs) =>
     credits: { hasCredits: false, unlimited: false, balance: null },
   });
 
-/** @param {{rollouts?: boolean, app?: string|null, activity?: string|null, resetsAtSec?: number}} o */
-function mock({ rollouts = true, app = null, activity = null, resetsAtSec }) {
+/** @param {{rollouts?: boolean, app?: string|null, activity?: string|null, resetsAtSec?: number, direct?: object|null}} o */
+function mock({ rollouts = true, app = null, activity = null, resetsAtSec, direct = null }) {
   setCtx({
     invoke: async (cmd, args) => {
       if (cmd === "fs_glob") return { hits: rollouts ? [{ path: PATH }] : [] };
+      if (cmd === "shell_run_command") {
+        if (!direct) throw new Error("offline");
+        return { stdout: `${JSON.stringify(direct)}\nHTTPSTATUS:200` };
+      }
+      if (args?.path === "/home/x/.codex/auth.json") {
+        if (!direct) throw new Error("ENOENT");
+        return { kind: "text", content: JSON.stringify({ auth_mode: "chatgpt", tokens: { access_token: "test" } }) };
+      }
       if (args?.path === APP_FILE) {
         if (!app) throw new Error("ENOENT");
         return { kind: "text", content: app };
@@ -79,6 +87,16 @@ assert.equal(u.expired, false);
 assert.ok(u.primary.resetsInSeconds > 7000 && u.primary.resetsInSeconds <= 7200);
 assert.equal(u.plan, "go");
 assert.equal(u.source, "codex-cli");
+
+// --- an account refresh wins over every local snapshot ---
+mock({
+  resetsAtSec: open,
+  direct: { rate_limit: { plan_type: "plus", primary_window: { used_percent: 43, limit_window_seconds: 18_000, reset_at: Math.floor(now / 1000) + 7200 } } },
+});
+u = await readCodexUsage("/home/x", "linux", true);
+assert.equal(u.source, "chatgpt-account");
+assert.equal(u.primary.pct, 43);
+assert.equal(u.primary.windowMinutes, 300);
 
 // --- the fix: ai-native is newer than the CLI, so it wins ---
 mock({ app: appFile(now - 60_000, 42, now + 7_200_000), resetsAtSec: open });
