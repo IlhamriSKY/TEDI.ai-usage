@@ -4,13 +4,14 @@
 //   Codex:  email + plan decoded from the id_token JWT in ~/.codex/auth.json.
 
 import { ctx } from "./runtime.js";
+import { planName } from "./claude.js";
 
 export async function readClaudeAccount(home) {
   let email = null;
   let plan = null;
   try {
     const cred = await ctx.invoke("fs_read_file", { path: `${home}/.claude/.credentials.json` });
-    if (cred?.kind === "text") plan = JSON.parse(cred.content)?.claudeAiOauth?.subscriptionType || null;
+    if (cred?.kind === "text") plan = planName(JSON.parse(cred.content)?.claudeAiOauth);
   } catch {
     /* not signed in */
   }

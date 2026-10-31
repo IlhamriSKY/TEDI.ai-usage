@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.18
+
+### Changed
+
+- **Claude plans use their current names: Free, Pro, Max and Ultra.** Anthropic renamed Max 20x to Ultra on 2026-10-30, but existing logins still report `max`, so the meter now tells the two apart by the account's rate-limit tier. A Max 20x login shows as "Claude Code (Ultra)", Max 5x as "Claude Code (Max)".
+- **Ultra has no 5-hour limit, and the meter says so.** The usage endpoint still counts the 5-hour window for a verified Ultra account but marks its session limit inactive, so the meter now reads that flag: the status-bar percentage follows the weekly limit, and the tooltip keeps the 5-hour bar faded with "no limit", because it still shows when the account was last used. An unverified Ultra account (temporary limit) is shown like any other window. Needs TEDI with `StatusItemDetailRow.dim` to fade the row; an older host draws it as a normal bar.
+
 ## 0.1.17
 
 ### Fixed

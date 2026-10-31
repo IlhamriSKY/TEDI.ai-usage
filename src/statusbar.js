@@ -21,7 +21,9 @@ export function renderClaude(u) {
     return;
   }
   const view = claudeView(u, heatmap(state.claudeDays, "prompts"));
-  setMeter(CLAUDE_ID, "claude.svg", u, u ? u.fiveHour : null, u ? u.weekly : null, view);
+  // No enforced 5-hour limit: the headline percentage follows the weekly one.
+  const fiveHour = u?.noFiveHourLimit ? null : (u?.fiveHour ?? null);
+  setMeter(CLAUDE_ID, "claude.svg", u, fiveHour, u ? u.weekly : null, view);
 }
 
 export function renderCodex(u) {
@@ -105,8 +107,18 @@ function claudeView(u, chart) {
   }
   // A per-model cap (Fable) only blocks that model, so it gets its own row but
   // stays out of the headline tone, which is about being able to work at all.
+  // A verified Ultra account has no 5-hour limit, but the endpoint still counts
+  // the window: keep its bar, faded, because it still shows when the account
+  // was last used. An unverified Ultra account gets a temporary limit, shown
+  // like any other window.
+  const fiveHour =
+    u.noFiveHourLimit && u.fiveHour
+      ? { ...u.fiveHour, dim: true }
+      : u.plan === "Ultra" && !u.fiveHour
+        ? { note: "no limit on Ultra" }
+        : u.fiveHour;
   const windows = [
-    ["5-hour", u.fiveHour],
+    ["5-hour", fiveHour],
     ["Weekly", u.weekly],
     ...(u.models ?? []).map((m) => [m.name, m]),
   ];
@@ -178,10 +190,11 @@ function textTooltip(title, windows) {
   const lines = [title];
   for (const [label, w] of windows) {
     if (!w || w.pct == null) {
-      lines.push(`${label}: no data`);
+      lines.push(`${label}: ${w?.note ?? "no data"}`);
     } else {
       const reset = resetNote(w);
-      lines.push(`${label} ${Math.round(w.pct)}%${reset ? ` ${reset}` : ""}`);
+      const free = w.dim ? " (no limit)" : "";
+      lines.push(`${label} ${Math.round(w.pct)}%${free}${reset ? ` ${reset}` : ""}`);
     }
   }
   return lines.join("\n");
@@ -191,7 +204,7 @@ function detailTooltip(title, windows) {
   const rows = [];
   for (const [label, w] of windows) {
     if (!w || w.pct == null) {
-      rows.push({ label, note: "no data" });
+      rows.push({ label, note: w?.note ?? "no data" });
     } else {
       // One window, one line: label, bar, percentage, countdown. The countdown
       // briefly lived on a line of its own to escape being clipped by the
@@ -201,9 +214,11 @@ function detailTooltip(title, windows) {
       rows.push({
         label,
         progress: clamp01(w.pct / 100),
-        tone: toneFor(w.pct),
+        // A faded, unenforced window is information, never a warning colour.
+        tone: w.dim ? "default" : toneFor(w.pct),
         value: `${Math.round(w.pct)}%`,
-        note: resetNote(w),
+        note: w.dim ? [resetNote(w), "no limit"].filter(Boolean).join(", ") : resetNote(w),
+        dim: w.dim || undefined,
       });
     }
   }

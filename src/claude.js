@@ -27,10 +27,22 @@ export async function readClaudeUsage(home, platform) {
   return {
     ok: true,
     plan: token.plan,
+    // A verified Ultra account still gets a `five_hour` reading, but its
+    // `limits[]` session entry says `is_active: false`: the window is counted,
+    // not enforced (claude.ai Settings > Usage then shows no session bar).
+    noFiveHourLimit: sessionInactive(json.limits, token.plan),
     fiveHour: pct(fh.utilization) != null ? { pct: pct(fh.utilization), resetsAt: fh.resets_at || null } : null,
     weekly: pct(wk.utilization) != null ? { pct: pct(wk.utilization), resetsAt: wk.resets_at || null } : null,
     models: modelLimits(json.limits),
   };
+}
+
+// shortcut: `is_active` is undocumented and Fable reads false too while still
+// capped, so it is trusted only for the session limit on Ultra, the one plan
+// documented to drop it; widen it if other plans start reporting it.
+export function sessionInactive(limits, plan) {
+  if (plan !== "Ultra" || !Array.isArray(limits)) return false;
+  return limits.some((l) => l?.kind === "session" && l.is_active === false);
 }
 
 // Per-model weekly caps (e.g. Fable), from the `limits` array. The top-level
@@ -85,7 +97,7 @@ async function tokenFromKeychain() {
 function parseCreds(text) {
   try {
     const oauth = JSON.parse(text)?.claudeAiOauth || {};
-    return { accessToken: oauth.accessToken || null, plan: oauth.subscriptionType || null };
+    return { accessToken: oauth.accessToken || null, plan: planName(oauth) };
   } catch {
     return {};
   }
@@ -140,6 +152,23 @@ function parseHttp(raw) {
     /* non-JSON body (e.g. an HTML error page) */
   }
   return { status, retryAfter, json };
+}
+
+/**
+ * The plan's current name from the credentials' `claudeAiOauth`. Anthropic
+ * renamed Max 20x to Ultra (2026-10-30) without touching existing logins: they
+ * still say `subscriptionType: "max"`, and only `rateLimitTier`
+ * (`default_claude_max_20x` vs `_5x`) tells the two apart. Ultra has no 5-hour
+ * limit once verified, so the name decides how a missing 5-hour window reads.
+ */
+export function planName(oauth) {
+  const type = String(oauth?.subscriptionType || "").toLowerCase();
+  const tier = String(oauth?.rateLimitTier || "").toLowerCase();
+  if (type === "ultra" || tier.includes("ultra") || tier.includes("20x")) return "Ultra";
+  if (type === "max") return "Max";
+  if (type === "pro") return "Pro";
+  if (type === "free") return "Free";
+  return type ? type.charAt(0).toUpperCase() + type.slice(1) : null;
 }
 
 function pct(x) {
