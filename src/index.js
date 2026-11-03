@@ -19,6 +19,7 @@ import { readCodexUsage } from "./codex.js";
 import { readClaudeAccount, readCodexAccount } from "./accounts.js";
 import { readClaudeDays } from "./history.js";
 import { renderClaude, renderCodex, removeAll } from "./statusbar.js";
+import { registerAiTool } from "./ai.js";
 
 // The Claude usage endpoint 429s aggressively at 30-60s (a known Claude Code
 // issue: anthropics/claude-code#31637), so poll gently and back off hard on 429.
@@ -29,6 +30,7 @@ const RATE_LIMIT_COOLDOWN_MS = 15 * 60_000;
 export async function activate(context) {
   setCtx(context);
   state.active = true;
+  registerAiTool();
 
   // Read + watch the show/hide switches. Guarded so a missing `settings:read`
   // permission (e.g. a stale approval) degrades to "show both" instead of

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0
+
+- **AI tool `ai_usage`.** An agent can read current usage and limits per provider, what the status bar shows.
+
 ## 0.1.18
 
 ### Changed

@@ -37,6 +37,8 @@ and the only network call is to Claude's own usage endpoint.
 | **Codex** | Reads the newest `~/.codex/sessions/**/rollout-*.jsonl` and pulls the last `token_count` event's `rate_limits` (the `primary` / `secondary` windows). Codex only writes these once it makes an API call, so the meter shows the last known snapshot with an "as of ..." note. Window sizes are labelled by their reported duration (5-hour / weekly / monthly). |
 | **Activity grid** | Claude counts prompts, from `~/.claude/history.jsonl` (one line per prompt you send, in any project). Codex counts sessions, from the dates in the rollout filenames the meter already globs. Both are local, and a day is shaded against the rest of your year rather than against your busiest day, so one enormous afternoon does not flatten everything else. |
 
+An agent can read the same numbers through the `ai_usage` AI tool, which answers from what the meters last read and makes no request of its own.
+
 The meter refreshes every 5 minutes. Anthropic's usage endpoint rate-limits
 aggressive polling (a known Claude Code issue), so on a 429 the extension backs
 off and keeps showing the last known percentages (marked "last known") instead

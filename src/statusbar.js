@@ -105,6 +105,15 @@ function claudeView(u, chart) {
     const note = reasonText(u.reason, "claude");
     return withChart({ tooltip: `${title}\n${note}` }, title, chart, note);
   }
+  const windows = claudeWindows(u);
+  const view = markStale(
+    { tooltip: textTooltip(title, windows), detail: detailTooltip(title, windows) },
+    u,
+  );
+  return withChart(view, title, chart);
+}
+
+export function claudeWindows(u) {
   // A per-model cap (Fable) only blocks that model, so it gets its own row but
   // stays out of the headline tone, which is about being able to work at all.
   // A verified Ultra account has no 5-hour limit, but the endpoint still counts
@@ -117,16 +126,11 @@ function claudeView(u, chart) {
       : u.plan === "Ultra" && !u.fiveHour
         ? { note: "no limit on Ultra" }
         : u.fiveHour;
-  const windows = [
+  return [
     ["5-hour", fiveHour],
     ["Weekly", u.weekly],
     ...(u.models ?? []).map((m) => [m.name, m]),
   ];
-  const view = markStale(
-    { tooltip: textTooltip(title, windows), detail: detailTooltip(title, windows) },
-    u,
-  );
-  return withChart(view, title, chart);
 }
 
 /**
@@ -162,20 +166,11 @@ function codexView(u, chart) {
     const note = reasonText(u.reason, "codex");
     return withChart({ tooltip: `${title}\n${note}` }, title, chart, note);
   }
-  // Codex window sizes vary by plan (5-hour / weekly / 30-day / ...), so label
-  // each by its own `window_minutes` rather than assuming 5h + weekly.
-  const windows = [];
-  for (const w of [u.primary, u.secondary]) {
-    if (w && w.pct != null) windows.push([winLabel(w.windowMinutes), w]);
-  }
+  const windows = codexWindows(u);
   const asOf = u.capturedAt ? `as of ${ago(u.capturedAt)}` : null;
 
   if (!windows.length) {
-    // `expired` = Codex did record a percentage, but its window has since
-    // reset, so the file still holds a number that describes nothing now.
-    const note = u.expired
-      ? "Usage window has reset. Run Codex once to refresh."
-      : "No usage recorded yet";
+    const note = codexEmptyNote(u);
     const text = `${title}\n${note}${asOf ? `\n${asOf}` : ""}`;
     const view = { tooltip: text, detail: { title, rows: [{ label: "", note }] } };
     return withChart(view, title, chart);
@@ -184,6 +179,24 @@ function codexView(u, chart) {
   const detail = detailTooltip(title, windows);
   if (asOf) detail.rows.push({ label: "", note: asOf });
   return withChart(markStale({ tooltip: text, detail }, u), title, chart);
+}
+
+export function codexWindows(u) {
+  // Codex window sizes vary by plan (5-hour / weekly / 30-day / ...), so label
+  // each by its own `window_minutes` rather than assuming 5h + weekly.
+  const windows = [];
+  for (const w of [u.primary, u.secondary]) {
+    if (w && w.pct != null) windows.push([winLabel(w.windowMinutes), w]);
+  }
+  return windows;
+}
+
+export function codexEmptyNote(u) {
+  // `expired` = Codex did record a percentage, but its window has since
+  // reset, so the file still holds a number that describes nothing now.
+  return u.expired
+    ? "Usage window has reset. Run Codex once to refresh."
+    : "No usage recorded yet";
 }
 
 function textTooltip(title, windows) {
@@ -237,7 +250,7 @@ function winLabel(mins) {
   return `${mins}-min`;
 }
 
-function resetNote(w) {
+export function resetNote(w) {
   if (w.resetsInSeconds != null) return "resets in " + fmtDur(w.resetsInSeconds * 1000);
   if (w.resetsAt) {
     const t = Date.parse(w.resetsAt);
@@ -264,7 +277,7 @@ function ago(ms) {
   return d <= 0 ? "just now" : fmtDur(d) + " ago";
 }
 
-function reasonText(reason, who) {
+export function reasonText(reason, who) {
   switch (reason) {
     case "not-signed-in":
       return "Not signed in. Run Claude Code once to sign in.";
